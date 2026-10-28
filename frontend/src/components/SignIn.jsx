@@ -1,192 +1,162 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { auth } from '../firebase'
-import { authErrorMessage } from '../authErrors'
-import { Link } from 'react-router-dom'
-import { Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react'
-import { 
-  signInWithEmailAndPassword, 
-  GoogleAuthProvider, 
+import { AuthLayout, AuthInput } from "./ui";
+import { useTranslation } from "../utils/translate";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { auth } from "../firebase";
+import { authErrorMessage } from "../authErrors";
+import { Link } from "react-router-dom";
+import { Zap, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
   signInWithPopup,
-  sendPasswordResetEmail
-} from 'firebase/auth'
+  sendPasswordResetEmail,
+} from "firebase/auth";
 
 export default function SignIn() {
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [errors, setErrors] = useState({})
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState({});
 
-    const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (loading) return
-    const newErrors = {}
-    if (!email.trim()) newErrors.email = 'This field is required'
-    if (!password.trim()) newErrors.password = 'This field is required'
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (loading) return;
+    const newErrors = {};
+    if (!email.trim()) newErrors.email = t("fieldRequired");
+    if (!password.trim()) newErrors.password = t("fieldRequired");
     if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      return
+      setErrors(newErrors);
+      return;
     }
 
-    setLoading(true)
-    setErrors({})
+    setLoading(true);
+    setErrors({});
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password)
-      navigate('/')
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      navigate("/");
     } catch (error) {
-      setErrors({ password: authErrorMessage(error) })
+      setErrors({ password: authErrorMessage(error) });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const clearError = (field) => {
     setErrors((prev) => {
-      const next = { ...prev }
-      delete next[field]
-      return next
-    })
-  }
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
   const handleGoogleSignIn = async () => {
-  if (loading) return;
-  setLoading(true);
-  setErrors({});
-  try {
-    const provider = new GoogleAuthProvider();
+    if (loading) return;
+    setLoading(true);
+    setErrors({});
+    try {
+      const provider = new GoogleAuthProvider();
 
-    await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, provider);
 
-    navigate("/");
-  } catch (error) {
-    setErrors({ email: authErrorMessage(error) });
-  } finally {
-    setLoading(false);
-  }
-};
+      navigate("/");
+    } catch (error) {
+      setErrors({ email: authErrorMessage(error) });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const handleForgotPassword = async () => {
-  if (!email.trim()) {
-    setErrors({ email: 'Enter your email address first' })
-    return
-  }
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setErrors({ email: t("enterEmailFirst") });
+      return;
+    }
 
-  try {
-    await sendPasswordResetEmail(auth, email.trim())
-    alert('Password reset email sent! Check your inbox.')
-  } catch (error) {
-    setErrors({ email: authErrorMessage(error) })
-  }
-};
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      alert(t("resetSent"));
+    } catch (error) {
+      setErrors({ email: authErrorMessage(error) });
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-dark-900 flex items-center justify-center p-4">
-      <div className="max-w-[420px] w-full glass rounded-2xl p-8 animate-fade-in">
-        {/* Logo */}
-        <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-gradient-to-br from-electric to-blue-400 flex items-center justify-center shadow-glow">
-          <Zap size={28} className="text-white" fill="white" />
-        </div>
-
-        {/* Heading */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome Back 👋</h1>
-          <p className="text-sm text-gray-400">Sign in to track your energy</p>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email */}
-          <div>
-            <div className="relative">
-              <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); clearError('email') }}
-                className="w-full bg-dark-700 border border-dark-500 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder-gray-500 focus:border-electric focus:ring-1 focus:ring-electric transition-all duration-300"
-              />
-            </div>
-            {errors.email && <p className="text-xs text-red-400 mt-1">{errors.email}</p>}
-          </div>
-
-          {/* Password */}
-          <div>
-            <div className="relative">
-              <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); clearError('password') }}
-                className="w-full bg-dark-700 border border-dark-500 rounded-xl py-3 pl-10 pr-11 text-white text-sm placeholder-gray-500 focus:border-electric focus:ring-1 focus:ring-electric transition-all duration-300"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            {errors.password && <p className="text-xs text-red-400 mt-1">{errors.password}</p>}
-          </div>
-
-          {/* Forgot Password */}
-          <div className="text-right">
+    <AuthLayout>
+      <p className="eyebrow">{t("smartEnergy")}</p>
+      <h1>{t("welcomeBack")}</h1>
+      <p className="auth-description">{t("signInToTrack")}</p>
+      <form onSubmit={handleSubmit}>
+        <AuthInput
+          label={t("emailAddress")}
+          icon={Mail}
+          type="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            clearError("email");
+          }}
+          error={errors.email}
+          required
+        />
+        <AuthInput
+          label={t("password")}
+          icon={Lock}
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            clearError("password");
+          }}
+          error={errors.password}
+          required
+          action={
             <button
-  type="button"
-  onClick={handleForgotPassword}
-  className="text-xs text-electric hover:text-electric-light transition-colors"
->
-  Forgot Password?
-</button>
-          </div>
-
-          {/* Submit */}
+              type="button"
+              className="icon-button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={t(showPassword ? "hidePassword" : "showPassword")}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          }
+        />
+        <div className="text-right mb-4">
           <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 bg-electric hover:bg-electric-dark text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-glow active:scale-[0.98]"
-          >
-            Sign In
-            <Zap size={18} />
-          </button>
-        </form>
-
-        {/* Divider */}
-        <div className="flex items-center gap-4 my-6">
-          <div className="flex-1 h-px bg-dark-500"></div>
-          <span className="text-xs text-gray-500 uppercase tracking-wider">Or continue with</span>
-          <div className="flex-1 h-px bg-dark-500"></div>
-        </div>
-
-        {/* Social Buttons */}
-        <div className="flex gap-4">
-          <button 
-            className="flex-1 glass-light rounded-xl py-3 flex items-center justify-center gap-2 hover:border-electric/30 transition-all duration-300"
-            onClick={handleGoogleSignIn}
+            type="button"
+            className="button subtle"
+            onClick={handleForgotPassword}
             disabled={loading}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            <span className="text-sm text-gray-300">Google</span>
+            {t("forgotPassword")}
           </button>
         </div>
-
-        {/* Bottom Link */}
-        <p className="text-center mt-8 text-sm text-gray-400">
-          Don't have an account?{' '}
-          <Link to="/create-account" className="text-electric hover:text-electric-light font-medium transition-colors">
-            Sign Up
-          </Link>
-        </p>
-      </div>
-    </div>
-  )
+        <button className="button full" disabled={loading} type="submit">
+          {loading ? t("signingIn") : t("signIn")}
+          <Zap size={17} />
+        </button>
+      </form>
+      <div className="auth-divider">{t("orContinueWith")}</div>
+      <button
+        className="button secondary full"
+        onClick={handleGoogleSignIn}
+        disabled={loading}
+      >
+        <span className="google-icon" aria-hidden="true">
+          G
+        </span>
+        {t("google")}
+      </button>
+      <p className="auth-bottom">
+        {t("dontHaveAccount")}
+        <Link to="/create-account">{t("signUp")}</Link>
+      </p>
+    </AuthLayout>
+  );
 }

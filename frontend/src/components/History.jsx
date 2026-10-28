@@ -1,117 +1,227 @@
-import { ArrowLeft, Zap, Calendar, TrendingUp, TrendingDown } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { BottomNav } from './HomeDashboard'
-import { useTranslation, useUnit } from '../utils/translate'
-import { useEffect, useState } from 'react'
-import { getDevices, getDailyUsage } from '../api'
+import { useEffect, useState } from "react";
+import {
+  CalendarDays,
+  ChartNoAxesCombined,
+  List,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
+import { getDailyUsage } from "../api";
+import { useMeter } from "../hooks/useMeter";
+import { useTranslation, useUnit } from "../utils/translate";
+import {
+  dailyPoints,
+  dateText,
+  energyText,
+  isDemo,
+  localDate,
+} from "../utils/energy";
+import EnergyChart from "./EnergyChart";
+import {
+  Badge,
+  Card,
+  CardTitle,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MeterSelect,
+  PageHeader,
+  Segmented,
+  Stat,
+  TextLink,
+} from "./ui";
 
 export default function History() {
-  const navigate = useNavigate()
-  const { t } = useTranslation()
-  const { format } = useUnit()
-  const [records, setRecords] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
-
+  const { t, currentLanguage } = useTranslation(),
+    { unit } = useUnit(),
+    meter = useMeter();
+  const [records, setRecords] = useState([]),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState(false),
+    [period, setPeriod] = useState("30"),
+    [revision, setRevision] = useState(0);
   useEffect(() => {
-    async function fetchHistory() {
-      try {
-        setIsLoading(true)
-        const devices = await getDevices()
-
-        if (!devices || devices.length === 0) {
-          setError(t('noDeviceFound') || 'No device found')
-          setIsLoading(false)
-          return
-        }
-
-        const deviceId = devices[0].id
-        const data = await getDailyUsage(deviceId)
-
-        if (data && data.length > 0) {
-          const formattedRecords = data.map((day, index, arr) => {
-            const prevValue = index < arr.length - 1 ? arr[index + 1].total_energy : null
-            const trend = prevValue !== null ? (day.total_energy > prevValue ? 'up' : 'down') : 'down'
-
-            return {
-              date: day.date,
-              value: day.total_energy,
-              cost: `₹${(day.total_energy * 0.26).toFixed(2)}`,
-              trend: trend
-            }
-          })
-          setRecords(formattedRecords)
-        } else {
-          setError(t('noReadingsFound') || 'No readings found for this device.')
-        }
-      } catch (err) {
-        console.error('History fetch error:', err)
-        setError(t('apiError') || 'Failed to load history')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchHistory()
-  }, [])
-
+    if (!meter.id) return;
+    let active = true;
+    setLoading(true);
+    setError(false);
+    getDailyUsage(meter.id)
+      .then((rows) => {
+        if (active) setRecords(dailyPoints(rows));
+      })
+      .catch(() => {
+        if (active) setError(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [meter.id, revision]);
+  const end = localDate(),
+    start = new Date(end + "T12:00:00");
+  start.setDate(start.getDate() - Number(period) + 1);
+  const cutoff = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+  const visible = records.filter((p) => p.label >= cutoff && p.label <= end),
+    sum = visible.reduce((n, p) => n + p.value, 0);
+  const fmt = (value) => energyText(value, unit);
+  const chartPoints = visible.map((p) => ({
+    label: dateText(p.label, currentLanguage).replace(/\s\d{4}$/, ""),
+    value: p.value / (unit === "MWh" ? 1000 : 1),
+  }));
   return (
-    <div className="min-h-screen bg-dark-900 pb-20">
-      <header className="sticky top-0 z-10 glass px-4 py-3 flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="text-gray-300 hover:text-white transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="text-lg font-semibold text-white">{t('history')}</h1>
-        <Calendar size={20} className="text-electric ml-auto" />
-      </header>
-
-      <div className="px-4 py-6 space-y-4 max-w-[420px] mx-auto animate-fade-in">
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <div className="w-10 h-10 border-4 border-electric border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-400 text-sm animate-pulse">{t('loadingData') || 'Loading history...'}</p>
+    <>
+      <PageHeader
+        eyebrow={t("measuredEnergy")}
+        title={t("history")}
+        description={t("historyDescription")}
+        action={
+          <MeterSelect
+            devices={meter.devices}
+            value={meter.id}
+            onChange={meter.setId}
+          />
+        }
+      />
+      {isDemo(meter.device) && (
+        <div className="demo-banner">{t("demoNote")}</div>
+      )}
+      {meter.error || error ? (
+        <ErrorState
+          onRetry={() => {
+            meter.reload();
+            setRevision((v) => v + 1);
+          }}
+        />
+      ) : meter.loading || loading ? (
+        <LoadingState />
+      ) : !meter.id ? (
+        <EmptyState
+          title={t("noDeviceFound")}
+          description={t("noMeterDescription")}
+          action={<TextLink to="/devices">{t("connectMeter")}</TextLink>}
+        />
+      ) : (
+        <>
+          <div className="toolbar">
+            <Segmented
+              label={t("period")}
+              options={[
+                ["1", t("day")],
+                ["7", t("week")],
+                ["30", t("month")],
+                ["90", t("quarter")],
+              ]}
+              value={period}
+              onChange={setPeriod}
+            />
+            <Badge>{t("usageScope")}</Badge>
           </div>
-        ) : error ? (
-          <div className="glass rounded-2xl p-8 text-center space-y-4">
-            <p className="text-white font-medium">{error}</p>
-            <button onClick={() => window.location.reload()} className="text-xs text-electric underline">Retry</button>
-          </div>
-        ) : (
-          <>
-            <h3 className="text-sm font-semibold text-gray-300 px-1">{t('dailyRecords')}</h3>
-            {records.length > 0 ? (
-              records.map((record, i) => (
-                <div key={i} className="glass rounded-2xl p-4 flex items-center justify-between hover:border-electric/20 transition-all duration-300">
-                  <div>
-                    <p className="text-sm font-medium text-white">{record.date}</p>
-                    <p className="text-xs text-gray-400 mt-1">{format(record.value)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-white">{record.cost}</p>
-                    <div className="flex items-center justify-end gap-1 mt-1">
-                      {record.trend === 'down' ? (
-                        <>
-                          <TrendingDown size={12} className="text-green-400" />
-                          <span className="text-[10px] text-green-400">{t('lower')}</span>
-                        </>
-                      ) : (
-                        <>
-                          <TrendingUp size={12} className="text-red-400" />
-                          <span className="text-[10px] text-red-400">{t('higher')}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+          {!visible.length ? (
+            <EmptyState
+              title={t("noReadingsFound")}
+              description={t("historyPeriodNote")}
+            />
+          ) : (
+            <>
+              <div className="stats-grid">
+                <Stat
+                  label={t("totalConsumption")}
+                  value={fmt(sum)}
+                  icon={Zap}
+                />
+                <Stat
+                  label={t("dailyAvg")}
+                  value={fmt(sum / visible.length)}
+                  icon={ChartNoAxesCombined}
+                  hint={t("latestRecords")}
+                />
+                <Stat
+                  label={t("highestDay")}
+                  value={fmt(Math.max(...visible.map((p) => p.value)))}
+                  icon={TrendingUp}
+                  tone="amber"
+                />
+                <Stat
+                  label={t("records")}
+                  value={visible.length}
+                  icon={List}
+                  tone="violet"
+                />
+              </div>
+              <Card>
+                <CardTitle
+                  icon={ChartNoAxesCombined}
+                  title={t("totalConsumption")}
+                />
+                <EnergyChart
+                  points={chartPoints}
+                  unit={unit}
+                  title={t("history")}
+                  type="bar"
+                />
+                <p className="note">{t("historyPeriodNote")}</p>
+              </Card>
+              <Card className="mt-5">
+                <CardTitle icon={CalendarDays} title={t("dailyRecords")} />
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{t("date")}</th>
+                        <th>{t("unitsConsumed")}</th>
+                        <th>{t("status")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...visible].reverse().map((row) => {
+                        const index = records.findIndex(
+                            (r) => r.label === row.label,
+                          ),
+                          previous = records[index - 1];
+                        const trend = !previous
+                          ? null
+                          : row.value > previous.value
+                            ? "higher"
+                            : row.value < previous.value
+                              ? "lower"
+                              : "equal";
+                        return (
+                          <tr key={row.label}>
+                            <td>{dateText(row.label, currentLanguage)}</td>
+                            <td>
+                              <strong>{fmt(row.value)}</strong>
+                            </td>
+                            <td>
+                              <span
+                                className={
+                                  trend === "higher"
+                                    ? "trend-up"
+                                    : trend === "lower"
+                                      ? "trend-down"
+                                      : "muted"
+                                }
+                                title={
+                                  !previous
+                                    ? t("noComparison")
+                                    : `${t("date")}: ${previous.label}`
+                                }
+                              >
+                                {trend ? t(trend) : "—"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-10 text-gray-500 text-sm">No records found.</div>
-            )}
-          </>
-        )}
-      </div>
-
-      <BottomNav active="History" />
-    </div>
-  )
+              </Card>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
 }

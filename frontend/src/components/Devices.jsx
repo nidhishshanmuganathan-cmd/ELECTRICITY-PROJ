@@ -1,85 +1,242 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Copy, Cpu, LoaderCircle, Plus } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { addDevice, getDevices, provisionDeviceToken } from '../api'
-import { BottomNav } from './HomeDashboard'
+import { useEffect, useState } from "react";
+import { Check, Copy, Cpu, Plus, Radio, Sparkles } from "lucide-react";
+import { addDevice, getDevices, provisionDeviceToken } from "../api";
+import { useTranslation } from "../utils/translate";
+import { dateText, isDemo } from "../utils/energy";
+import {
+  Badge,
+  Card,
+  CardTitle,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+} from "./ui";
 
-const initialForm = { device_name: '', device_code: '', location: '', wifi_ssid: '', firmware_version: '' }
-
+const initialForm = {
+  device_name: "",
+  device_code: "",
+  location: "",
+  wifi_ssid: "",
+  firmware_version: "",
+};
 export default function Devices() {
-  const navigate = useNavigate()
-  const [devices, setDevices] = useState([])
-  const [form, setForm] = useState(initialForm)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  const [token, setToken] = useState(null)
-  const [copied, setCopied] = useState(false)
-
-  const loadDevices = async () => {
+  const { t, currentLanguage } = useTranslation();
+  const [devices, setDevices] = useState([]),
+    [form, setForm] = useState(initialForm),
+    [loading, setLoading] = useState(true),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState(null),
+    [token, setToken] = useState(null),
+    [copied, setCopied] = useState(false),
+    [pendingId, setPendingId] = useState(null);
+  async function loadDevices() {
+    setLoading(true);
     try {
-      setLoading(true)
-      setDevices(await getDevices())
-      setError(null)
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to load your meters.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { loadDevices() }, [])
-
-  const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
-      const payload = Object.fromEntries(Object.entries(form).filter(([, value]) => value.trim()))
-      const device = await addDevice(payload)
-      const provisioned = await provisionDeviceToken(device.id)
-      setToken(provisioned.device_token)
-      setForm(initialForm)
-      await loadDevices()
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to connect this meter.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const copyToken = async () => {
-    try {
-      await navigator.clipboard.writeText(token)
-      setCopied(true)
+      setDevices(await getDevices());
     } catch {
-      setError('Copy the token manually from this screen.')
+      setError(t("apiError"));
+    } finally {
+      setLoading(false);
     }
   }
-
+  useEffect(() => {
+    loadDevices();
+  }, []);
+  const update = (e) =>
+    setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
+  async function provision(id) {
+    const result = await provisionDeviceToken(id);
+    setToken(result.device_token);
+    setCopied(false);
+    setPendingId(null);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = Object.fromEntries(
+        Object.entries(form)
+          .filter(([, v]) => v.trim())
+          .map(([k, v]) => [k, v.trim()]),
+      );
+      const device = await addDevice(payload);
+      setPendingId(device.id);
+      setForm(initialForm);
+      try {
+        await provision(device.id);
+      } catch {
+        setError(t("provisioningFailed"));
+      }
+      await loadDevices();
+    } catch (err) {
+      setError(typeof err.message === "string" ? err.message : t("saveFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function retryProvision() {
+    setSaving(true);
+    try {
+      await provision(pendingId);
+      setError(null);
+    } catch {
+      setError(t("provisioningFailed"));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+    } catch {
+      setError(t("copyFailed"));
+    }
+  }
   return (
-    <div className="min-h-screen bg-dark-900 pb-20">
-      <header className="sticky top-0 z-10 glass flex items-center gap-3 px-4 py-3">
-        <button onClick={() => navigate(-1)} className="text-gray-300 hover:text-white" aria-label="Go back"><ArrowLeft size={20} /></button>
-        <h1 className="text-lg font-semibold text-white">Connect a meter</h1>
-        <Cpu size={20} className="ml-auto text-electric" />
-      </header>
-      <main className="mx-auto max-w-[420px] space-y-5 px-4 py-6">
-        <p className="text-sm leading-relaxed text-gray-400">Register your ESP32 meter using the device code configured on it. We will create a secure upload token for that meter.</p>
-        {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
-        {token && <section className="rounded-2xl border border-green-500/30 bg-green-500/10 p-5"><div className="mb-2 flex items-center gap-2 text-green-300"><Check size={18} /><h2 className="font-semibold">Meter connected</h2></div><p className="mb-3 text-xs text-gray-300">Copy this upload token now. It is shown only once; store it securely in the meter configuration.</p><code className="block break-all rounded-lg bg-dark-900 p-3 text-xs text-white">{token}</code><button onClick={copyToken} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-electric"><Copy size={15} />{copied ? 'Copied' : 'Copy token'}</button></section>}
-        <form onSubmit={handleSubmit} className="glass space-y-4 rounded-2xl p-5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-white"><Plus size={17} className="text-electric" />New meter</h2>
-          <label className="block text-xs text-gray-400">Meter name<input name="device_name" required maxLength="100" value={form.device_name} onChange={update} placeholder="Home main meter" className="mt-1.5 w-full rounded-xl border border-dark-500 bg-dark-700 px-4 py-3 text-sm text-white" /></label>
-          <label className="block text-xs text-gray-400">Device code<input name="device_code" required pattern="[A-Za-z0-9_-]+" maxLength="20" value={form.device_code} onChange={update} placeholder="ESP32-001" className="mt-1.5 w-full rounded-xl border border-dark-500 bg-dark-700 px-4 py-3 text-sm text-white" /></label>
-          <label className="block text-xs text-gray-400">Location (optional)<input name="location" maxLength="100" value={form.location} onChange={update} placeholder="Apartment 2B" className="mt-1.5 w-full rounded-xl border border-dark-500 bg-dark-700 px-4 py-3 text-sm text-white" /></label>
-          <button disabled={saving} className="flex w-full items-center justify-center gap-2 rounded-xl bg-electric py-3 font-semibold text-white disabled:opacity-50">{saving && <LoaderCircle size={17} className="animate-spin" />}{saving ? 'Connecting…' : 'Connect meter'}</button>
-        </form>
-        <section className="glass rounded-2xl p-5"><h2 className="mb-3 text-sm font-semibold text-white">Your meters</h2>{loading ? <LoaderCircle size={20} className="animate-spin text-electric" /> : devices.length ? <div className="space-y-3">{devices.map((device) => <div key={device.id} className="rounded-xl bg-dark-700 p-3"><p className="font-medium text-white">{device.device_name}</p><p className="mt-1 text-xs text-gray-400">{device.device_code} · {device.location || 'No location'} · {device.status}</p></div>)}</div> : <p className="text-sm text-gray-400">No meters connected yet.</p>}</section>
-      </main>
-      <BottomNav active="" />
-    </div>
-  )
+    <>
+      <PageHeader
+        eyebrow={t("workspace")}
+        title={t("devices")}
+        description={t("devicesDescription")}
+        action={
+          <Badge tone="blue">
+            <Cpu size={13} />
+            {devices.length} {t("devices")}
+          </Badge>
+        }
+      />
+      {error && (
+        <ErrorState
+          message={error}
+          onRetry={pendingId ? retryProvision : loadDevices}
+        />
+      )}
+      {token && (
+        <Card className="mb-5">
+          <CardTitle
+            icon={Check}
+            title={t("registered")}
+            action={<Badge tone="green">{t("deviceCode")}</Badge>}
+          />
+          <p className="muted text-xs leading-relaxed">
+            {t("tokenInstructions")}
+          </p>
+          <code className="token-block">{token}</code>
+          <button className="button secondary" onClick={copy}>
+            <Copy size={15} />
+            {copied ? t("copied") : t("copyToken")}
+          </button>
+        </Card>
+      )}
+      <div className="split-grid">
+        <Card>
+          <CardTitle icon={Plus} title={t("newMeter")} />
+          <p className="note mb-5">{t("meterInstructions")}</p>
+          <form onSubmit={submit}>
+            <label className="form-field">
+              {t("meterName")}
+              <input
+                name="device_name"
+                required
+                maxLength="100"
+                autoComplete="off"
+                value={form.device_name}
+                onChange={update}
+              />
+            </label>
+            <label className="form-field">
+              {t("deviceCode")}
+              <input
+                name="device_code"
+                required
+                minLength="3"
+                pattern="[A-Za-z0-9_-]+"
+                maxLength="20"
+                autoComplete="off"
+                autoCapitalize="none"
+                value={form.device_code}
+                onChange={update}
+              />
+            </label>
+            <label className="form-field">
+              {t("location")} · {t("optional")}
+              <input
+                name="location"
+                maxLength="100"
+                value={form.location}
+                onChange={update}
+              />
+            </label>
+            <button disabled={saving || !!pendingId} className="button full">
+              <Plus size={16} />
+              {saving ? t("saving") : t("connectMeter")}
+            </button>
+          </form>
+          {pendingId && (
+            <button
+              className="button secondary full mt-3"
+              disabled={saving}
+              onClick={retryProvision}
+            >
+              {t("retryProvision")}
+            </button>
+          )}
+        </Card>
+        <Card>
+          <CardTitle icon={Radio} title={t("yourMeters")} />
+          {loading ? (
+            <LoadingState />
+          ) : devices.length ? (
+            <div className="device-list">
+              {devices.map((d) => (
+                <div className="device-row" key={d.id}>
+                  <div className="device-row-header">
+                    <h3>{d.device_name}</h3>
+                    <Badge
+                      tone={
+                        isDemo(d)
+                          ? "amber"
+                          : d.status === "online"
+                            ? "green"
+                            : "neutral"
+                      }
+                    >
+                      {isDemo(d)
+                        ? t("demo")
+                        : t(
+                            ["online", "offline"].includes(d.status)
+                              ? d.status
+                              : "unknown",
+                          )}
+                    </Badge>
+                  </div>
+                  <p>
+                    {d.device_code}
+                    {d.location ? ` · ${d.location}` : ""}
+                  </p>
+                  <p>
+                    {t("lastSeen")}: {dateText(d.last_seen, currentLanguage)}
+                    {d.last_seen
+                      ? ` · ${new Date(d.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      : ""}
+                  </p>
+                  {isDemo(d) && <p className="tone-amber">{t("demoNote")}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Cpu}
+              title={t("noDeviceFound")}
+              description={t("noMeterDescription")}
+            />
+          )}
+        </Card>
+      </div>
+    </>
+  );
 }

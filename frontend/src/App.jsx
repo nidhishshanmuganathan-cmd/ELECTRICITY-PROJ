@@ -1,115 +1,165 @@
-import { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
-import { AuthProvider, useAuth } from './AuthContext'
-import { ensureForegroundListener } from './notifications'
+import { AuthProvider, useAuth } from "./AuthContext";
+import { ensureForegroundListener } from "./notifications";
 
-import SignIn from './components/SignIn'
-import CreateAccount from './components/CreateAccount'
-import HomeDashboard from './components/HomeDashboard'
-import Analysis from './components/Analysis'
-import Insights from './components/Insights'
-import History from './components/History'
-import Profile from './components/Profile'
-import Devices from './components/Devices'
-import PushSetup from './components/PushSetup'
+import { AppLayout, LoadingState } from "./components/ui";
+import { useTranslation } from "./utils/translate";
+const SignIn = lazy(() => import("./components/SignIn"));
+const CreateAccount = lazy(() => import("./components/CreateAccount"));
+const HomeDashboard = lazy(() => import("./components/HomeDashboard"));
+const Analysis = lazy(() => import("./components/Analysis"));
+const Insights = lazy(() => import("./components/Insights"));
+const History = lazy(() => import("./components/History"));
+const Profile = lazy(() => import("./components/Profile"));
+const Devices = lazy(() => import("./components/Devices"));
+const Alerts = lazy(() => import("./components/Alerts"));
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>Loading WattWatcher...</div>
+    return (
+      <div className="page-content">
+        <LoadingState />
+      </div>
+    );
   }
 
   if (!user) {
-    return <Navigate to="/signin" replace />
+    return <Navigate to="/signin" replace />;
   }
 
-  return <><PushSetup />{children}</>
+  return (
+    <AppLayout>
+      <Suspense fallback={<LoadingState />}>{children}</Suspense>
+    </AppLayout>
+  );
 }
 
 function PublicRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading } = useAuth();
 
   if (loading) {
-    return <div>Loading WattWatcher...</div>
+    return (
+      <div className="page-content">
+        <LoadingState />
+      </div>
+    );
   }
 
   if (user) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/" replace />;
   }
 
-  return children
+  return (
+    <Suspense
+      fallback={
+        <div className="page-content">
+          <LoadingState />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
 }
 
 function PushRegistration() {
-  const { user } = useAuth()
+  const { user } = useAuth();
 
   useEffect(() => {
     if (user?.firebaseUser) {
-      ensureForegroundListener()
+      ensureForegroundListener();
     }
-  }, [user?.firebaseUser])
+  }, [user?.firebaseUser]);
 
-  return null
+  return null;
 }
 
 export default function App() {
+  const { t, currentLanguage } = useTranslation();
   useEffect(() => {
-    if ('serviceWorker' in navigator && window.isSecureContext) {
-      navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {})
+    document.documentElement.lang =
+      { English: "en", Hindi: "hi", Tamil: "ta", Telugu: "te" }[
+        currentLanguage
+      ] || "en";
+  }, [currentLanguage]);
+  useEffect(() => {
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      navigator.serviceWorker
+        .register("/firebase-messaging-sw.js")
+        .catch(() => {});
     }
-  }, [])
-  const [pushMessage, setPushMessage] = useState(null)
+  }, []);
+  const [pushMessage, setPushMessage] = useState(null);
 
   useEffect(() => {
     const showPushMessage = (event) => {
-      setPushMessage(event.detail)
-    }
+      setPushMessage(event.detail);
+    };
 
-    window.addEventListener('wattwatcher:push', showPushMessage)
+    window.addEventListener("wattwatcher:push", showPushMessage);
     return () => {
-      window.removeEventListener('wattwatcher:push', showPushMessage)
-    }
-  }, [])
+      window.removeEventListener("wattwatcher:push", showPushMessage);
+    };
+  }, []);
 
   useEffect(() => {
     const handleThemeChange = () => {
-      const isLight = localStorage.getItem('wattwatcher_theme') === 'light'
+      const isLight = localStorage.getItem("wattwatcher_theme") === "light";
 
       if (isLight) {
-        document.body.classList.add('light-theme')
+        document.body.classList.add("light-theme");
       } else {
-        document.body.classList.remove('light-theme')
+        document.body.classList.remove("light-theme");
       }
-    }
+    };
 
-    handleThemeChange()
+    handleThemeChange();
 
-    window.addEventListener('themeChange', handleThemeChange)
+    window.addEventListener("themeChange", handleThemeChange);
 
     return () => {
-      window.removeEventListener('themeChange', handleThemeChange)
-    }
-  }, [])
+      window.removeEventListener("themeChange", handleThemeChange);
+    };
+  }, []);
 
   return (
     <AuthProvider>
       <PushRegistration />
       <Router>
         {pushMessage && (
-          <div className="fixed left-4 right-4 top-4 z-[100] mx-auto max-w-[420px] rounded-xl border border-electric/40 bg-dark-800 p-4 shadow-2xl">
-            <p className="text-sm font-semibold text-white">{pushMessage.title}</p>
-            <p className="mt-1 text-xs text-gray-300">{pushMessage.body}</p>
+          <div role="status" className="toast push-toast">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white">
+                {pushMessage.title}
+              </p>
+              <p className="mt-1 text-xs text-gray-300">{pushMessage.body}</p>
+            </div>
             <button
               onClick={() => setPushMessage(null)}
               className="mt-2 text-xs font-medium text-electric"
             >
-              Dismiss
+              {t("dismiss")}
             </button>
           </div>
         )}
         <Routes>
+          <Route
+            path="/alerts"
+            element={
+              <ProtectedRoute>
+                <Alerts />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Login pages */}
           <Route
@@ -186,9 +236,8 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-
         </Routes>
       </Router>
     </AuthProvider>
-  )
+  );
 }

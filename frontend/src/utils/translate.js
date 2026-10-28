@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { uiTranslations } from './uiTranslations';
 
 const translations = {
   English: {
@@ -378,7 +379,7 @@ export const useTranslation = () => {
   }, []);
 
   return {
-    t: (key) => translations[lang]?.[key] || translations['English']?.[key] || key,
+    t: (key) => uiTranslations[lang]?.[key] || translations[lang]?.[key] || uiTranslations.English[key] || translations.English?.[key] || key,
     currentLanguage: lang,
     setLanguage
   };
