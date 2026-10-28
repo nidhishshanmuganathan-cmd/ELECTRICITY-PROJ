@@ -66,6 +66,10 @@ def test_sends_to_stored_token(db):
         assert message.notification.title == "Limit warning"
         assert message.notification.body == "Usage at 85%"
         assert message.data == {"status": "warning"}
+        assert message.webpush.headers == {"Urgency": "high", "TTL": "3600"}
+        assert message.webpush.notification.icon == '/icon-192.png'
+        assert message.webpush.notification.tag
+        assert message.webpush.fcm_options.link == 'https://electricity-proj.vercel.app/'
     finally:
         drop_user(db, user)
 
@@ -101,3 +105,20 @@ def test_send_to_token_coerces_data_to_strings():
         )
     message = mock_send.call_args[0][0]
     assert message.data == {"usage": "129.913", "ok": "True"}
+
+
+def test_send_failure_does_not_expose_provider_details(caplog):
+    from app.services.fcm import PushDeliveryError
+    with patch('app.services.fcm.messaging.send', side_effect=RuntimeError('secret-token-value')):
+        with pytest.raises(PushDeliveryError) as error:
+            FCMService.send_to_token('secret-token-value', 'Test', 'Test')
+    assert 'secret-token-value' not in str(error.value)
+    assert 'secret-token-value' not in caplog.text
+
+
+def test_fcm_acceptance_is_logged(caplog):
+    import logging
+    with caplog.at_level(logging.INFO), patch('app.services.fcm.messaging.send', return_value='test-message-id'):
+        FCMService.send_to_token('secret-token-value', 'Test', 'Test', {'notification_tag': 'monthly-warning'})
+    assert 'push_accepted message_id=test-message-id' in caplog.text
+    assert 'secret-token-value' not in caplog.text

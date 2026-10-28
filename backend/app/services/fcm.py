@@ -2,6 +2,14 @@ from firebase_admin import messaging
 from sqlalchemy.orm import Session
 from app import firebase  # noqa: F401  (just triggers Firebase Admin init)
 from app.models.user import User
+import logging
+import uuid
+
+logger = logging.getLogger(__name__)
+
+
+class PushDeliveryError(Exception):
+    """Safe error that never includes device tokens or provider credentials."""
 
 
 class FCMService:
@@ -20,12 +28,33 @@ class FCMService:
         # NOTE: the pinned firebase_admin SDK deprecates Message(token=...),
         # but `token` remains the correct v1-API field for the web
         # registration tokens stored in users.fcm_token, so it is kept.
+        tag = str((data or {}).get('notification_tag') or uuid.uuid4())
         message = messaging.Message(
             token=token,
             notification=messaging.Notification(title=title, body=body),
             data={k: str(v) for k, v in (data or {}).items()},
+            webpush=messaging.WebpushConfig(
+                headers={"Urgency": "high", "TTL": "3600"},
+                notification=messaging.WebpushNotification(
+                    icon="/icon-192.png", tag=tag,
+                ),
+                fcm_options=messaging.WebpushFCMOptions(
+                    link="https://electricity-proj.vercel.app/",
+                ),
+            ),
         )
-        return messaging.send(message)
+        try:
+            message_id = messaging.send(message)
+        except messaging.UnregisteredError:
+            logger.warning("push_rejected reason=unregistered")
+            raise PushDeliveryError("Push registration expired. Enable notifications again on this device.") from None
+        except Exception as error:
+            logger.warning("push_rejected error_type=%s", type(error).__name__)
+            raise PushDeliveryError("Firebase could not accept the notification. Check backend Firebase permissions and retry.") from None
+        if not message_id:
+            raise PushDeliveryError("Firebase did not confirm notification acceptance. Please retry.")
+        logger.info("push_accepted message_id=%s", message_id)
+        return message_id
 
     @staticmethod
     def notify_user(

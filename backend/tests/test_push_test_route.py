@@ -29,10 +29,23 @@ def test_push_test_sends_only_to_current_user(db):
     app.dependency_overrides[get_current_user] = current_user
     app.dependency_overrides[get_db] = lambda: db
     try:
-        with patch("app.routes.users.FCMService.notify_user", return_value="message-id"):
+        with patch("app.routes.users.FCMService.notify_user", return_value="message-id") as send:
             response = TestClient(app).post("/users/me/push-test")
         assert response.status_code == 200
-        assert response.json() == {"success": True}
+        assert response.json() == {"success": True, "status": "accepted_by_fcm", "message_id": "message-id"}
+        assert send.call_args.args[1] == user.id
+        from app.services.fcm import PushDeliveryError
+        with patch("app.routes.users.FCMService.notify_user", side_effect=PushDeliveryError("Registration expired")):
+            response = TestClient(app).post("/users/me/push-test")
+        assert response.status_code == 502
+        assert response.json()['detail'] == 'Registration expired'
+        with patch("app.routes.users.FCMService.notify_user", return_value=None):
+            assert TestClient(app).post("/users/me/push-test").status_code == 502
+        user.fcm_token = None
+        db.commit()
+        with patch("app.routes.users.FCMService.notify_user") as send:
+            assert TestClient(app).post("/users/me/push-test").status_code == 409
+            send.assert_not_called()
     finally:
         app.dependency_overrides.clear()
         db.delete(user)

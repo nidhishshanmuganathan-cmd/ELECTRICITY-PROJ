@@ -18,7 +18,7 @@ class User(Base):
     timezone = Column(String(50), default="Asia/Kolkata")
     monthly_limit = Column(Numeric(10, 2), default=500)
     fcm_token = Column(String(255), nullable=True)
-    # The most recent alert level that produced a push notification.  This
+    # Month and alert level (YYYY-MM:warning/exceeded) accepted by FCM. This
     # prevents a meter that reports every few seconds from sending the same
     # warning repeatedly while it remains over the threshold.
     last_notification_status = Column(String(20), nullable=True)

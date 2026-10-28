@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from typing import Literal
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
@@ -7,7 +8,7 @@ from app.models.user import User
 from app.schemas.alerts import AlertsOut
 from app.schemas.user import DeviceTokenIn, DeviceTokenOut, UserOut
 from app.services.alerts import AlertService
-from app.services.fcm import FCMService
+from app.services.fcm import FCMService, PushDeliveryError
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -131,7 +132,13 @@ def test_notification(
     return result
 
 
-@router.post("/me/push-test")
+class PushTestOut(BaseModel):
+    success: bool
+    status: Literal["accepted_by_fcm"]
+    message_id: str
+
+
+@router.post("/me/push-test", response_model=PushTestOut)
 def send_push_test(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -141,12 +148,15 @@ def send_push_test(
     if user is None or not user.fcm_token:
         raise HTTPException(status_code=409, detail="Enable notifications on this device first")
 
-    message_id = FCMService.notify_user(
-        db, user.id, "WattWatcher is ready", "Test notification delivered successfully."
-    )
+    try:
+        message_id = FCMService.notify_user(
+            db, user.id, "WattWatcher test alert", "Your energy alerts can appear here, even when WattWatcher is in the background."
+        )
+    except PushDeliveryError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from None
     if not message_id:
-        raise HTTPException(status_code=502, detail="Notification could not be delivered")
-    return {"success": True}
+        raise HTTPException(status_code=502, detail="Firebase did not accept the notification")
+    return {"success": True, "status": "accepted_by_fcm", "message_id": message_id}
 
 
 @router.put("/me", response_model=UserOut)
