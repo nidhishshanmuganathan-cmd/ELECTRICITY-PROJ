@@ -14,6 +14,7 @@ self.addEventListener('notificationclick', (event) => {
   })())
 })
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()))
 importScripts('https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js')
 importScripts('https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js')
 
@@ -35,6 +36,8 @@ messaging.onBackgroundMessage((payload) => {
   const options = {
     body: (payload.notification && payload.notification.body) || 'You have a new energy alert.',
     data: (payload && payload.data) || {},
+    icon: '/icon-192.png',
+    tag: payload.data?.notification_tag || payload.messageId,
   }
   return self.registration.showNotification(payload.data?.title || title, { ...options, body: payload.data?.body || options.body })
 })

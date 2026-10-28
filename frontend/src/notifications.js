@@ -44,9 +44,11 @@ function attachForegroundListener(messaging) {
       detail: { title, body },
     }))
     try {
-      navigator.serviceWorker.ready.then((registration) => registration.showNotification(title, { body })).catch(() => {})
+      navigator.serviceWorker.ready.then((registration) => registration.showNotification(title, {
+        body, icon: '/icon-192.png', tag: payload.data?.notification_tag || payload.messageId,
+      })).catch(() => console.warn('System notification display failed. Check browser notification settings.'))
     } catch (err) {
-      console.error('Foreground notification display failed:', err)
+      console.error('Foreground notification display failed')
     }
   })
 }
@@ -95,12 +97,13 @@ export async function ensureForegroundListener() {
     attachForegroundListener(messaging)
     return true
   } catch (err) {
-    console.error('Foreground listener attach failed:', err)
+    console.error('Push token refresh failed; enable notifications again')
     return false
   }
 }
 
 export async function enablePushNotifications() {
+  if (!auth.currentUser) return { ok: false, message: 'Sign in before enabling notifications.' }
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   if (ios && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
     return { ok: false, message: 'On iPhone (iOS 16.4+), use Share → Add to Home Screen, open the app icon, then enable notifications.' }
@@ -119,7 +122,7 @@ export async function enablePushNotifications() {
     try {
       permission = await Notification.requestPermission()
     } catch (err) {
-      console.error('Notification permission request failed:', err)
+      console.error('Notification permission request failed')
       return { ok: false, message: 'Notification permission request failed.' }
     }
   }
@@ -166,6 +169,12 @@ export async function enablePushNotifications() {
     return { ok: true, token }
   } catch (err) {
     console.error('Push registration failed')
+    if (err?.code === 'messaging/failed-service-worker-registration') {
+      return { ok: false, message: 'The background notification worker could not start. Reload WattWatcher and try again.' }
+    }
+    if (err?.code === 'messaging/token-subscribe-failed' || err?.name === 'InvalidAccessError') {
+      return { ok: false, message: 'Firebase could not register this browser. Check the project Web Push key and FCM Registration API.' }
+    }
     return { ok: false, message: 'Push registration failed. Please try again.' }
   }
 }

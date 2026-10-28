@@ -26,11 +26,18 @@ export default function Profile() {
   const [notifBusy, setNotifBusy] = useState(false)
 
   const handlePushTest = async () => {
+    if (notifBusy) return
     setNotifBusy(true)
     setNotifError(null)
     try {
-      await sendPushTest()
-      setNotifError('Test notification sent. Check your notification tray.')
+      const registration = await enablePushNotifications()
+      if (!registration.ok) throw new Error(registration.message)
+      const result = await sendPushTest()
+      if (result.status !== 'accepted_by_fcm' || !result.message_id) {
+        throw new Error('The server did not confirm Firebase acceptance. Update the backend and retry.')
+      }
+      setNotifications(true)
+      setNotifError('Firebase accepted the test. Check Android notifications; phone delivery is not yet confirmed.')
     } catch (error) {
       setNotifError(error.message || 'Test notification failed.')
     } finally {
