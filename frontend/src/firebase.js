@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getMessaging, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCRb_eZSnrHLx3WoeJDWD_iBdppkMMgksk",
@@ -19,7 +18,9 @@ export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY?.trim();
 let messagingPromise = null;
 export function getMessagingInstance() {
   if (!messagingPromise) {
-    messagingPromise = isSupported().then((ok) => (ok ? getMessaging(app) : null));
+    messagingPromise = import("firebase/messaging").then(async ({ isSupported, getMessaging }) =>
+      await isSupported() ? getMessaging(app) : null,
+    );
   }
   return messagingPromise;
 }

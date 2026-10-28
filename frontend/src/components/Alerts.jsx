@@ -99,9 +99,11 @@ export default function Alerts() {
     [version, setVersion] = useState(0);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
     setData(null);
     setError(false);
-    getAlerts()
+    getAlerts(options)
       .then((value) => {
         if (active) setData(value);
       })
@@ -110,14 +112,13 @@ export default function Alerts() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [version]);
   return (
     <>
       <PageHeader
-        eyebrow={t("smartEnergy")}
         title={t("usageAlerts")}
-        description={t("alertsDescription")}
         action={<TextLink to="/profile">{t("pushSettings")}</TextLink>}
       />
       {error ? (

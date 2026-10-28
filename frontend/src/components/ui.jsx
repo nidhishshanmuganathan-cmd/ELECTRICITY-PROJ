@@ -21,7 +21,6 @@ import { useTranslation } from "../utils/translate";
 import PushSetup from "./PushSetup";
 
 export function Brand() {
-  const { t } = useTranslation();
   return (
     <span className="brand">
       <span className="brand-mark">
@@ -29,7 +28,6 @@ export function Brand() {
       </span>
       <span>
         Watt<span className="brand-light">Watcher</span>
-        <small>{t("brandTagline")}</small>
       </span>
     </span>
   );
@@ -70,13 +68,6 @@ export function Navigation() {
             ["/alerts", "usageAlerts", Bell],
           ].map(item)}
         </nav>
-        <div className="sidebar-foot">
-          <ShieldCheck size={18} />
-          <div>
-            <strong>{t("everyWattCounts")}</strong>
-            <p>{t("energyClarity")}</p>
-          </div>
-        </div>
       </aside>
       <nav className="bottom-nav" aria-label={t("mainNavigation")}>
         {destinations.map(item)}
@@ -105,10 +96,7 @@ export function AppLayout({ children }) {
           <Link className="mobile-brand" to="/">
             <Brand />
           </Link>
-          <span className="desktop-context">
-            <span className="status-dot" />
-            {t("energyWorkspace")}
-          </span>
+          <span className="desktop-context">{t("energyWorkspace")}</span>
           <div className="topbar-actions">
             <Link
               to="/devices"
@@ -135,7 +123,6 @@ export function AppLayout({ children }) {
         </main>
         <footer className="app-footer">
           <span>WattWatcher</span>
-          <span>{t("everyWattCounts")}</span>
         </footer>
       </div>
     </div>
@@ -293,7 +280,7 @@ export function EnergyGauge({ value, limit, format, label }) {
       <svg viewBox="0 0 220 220" aria-hidden="true">
         <defs>
           <linearGradient id={id}>
-            <stop stopColor="#3B82F6" />
+            <stop stopColor="var(--primary)" />
             <stop
               offset="1"
               stopColor={
@@ -301,7 +288,7 @@ export function EnergyGauge({ value, limit, format, label }) {
                   ? "#F87171"
                   : percent >= 80
                     ? "#FBBF24"
-                    : "#38BDF8"
+                    : "var(--violet)"
               }
             />
           </linearGradient>
@@ -407,8 +394,10 @@ export function AuthLayout({ children }) {
       <aside className="auth-story">
         <Brand />
         <div className="auth-story-content">
-          <span className="eyebrow">{t("smartEnergy")}</span>
-          <h2>{t("authHeadline")}</h2>
+          <h2>
+            <span>{t("authHeadline")}</span>
+            <span>{t("authHeadlineSecond")}</span>
+          </h2>
           <p>{t("authDescription")}</p>
           <div className="auth-orbit" aria-hidden="true">
             <div>
@@ -419,9 +408,9 @@ export function AuthLayout({ children }) {
           </div>
           <div className="auth-benefits">
             {[
-              [Activity, "measuredEnergy"],
-              [BrainCircuit, "insights"],
-              [Bell, "usageAlerts"],
+              [Activity, "meterReadings"],
+              [ChartNoAxesCombined, "usageTrends"],
+              [Bell, "alertsLabel"],
             ].map(([Icon, key]) => (
               <span key={key}>
                 <Icon size={18} />
@@ -430,7 +419,6 @@ export function AuthLayout({ children }) {
             ))}
           </div>
         </div>
-        <p className="muted">{t("everyWattCounts")}</p>
       </aside>
       <main className="auth-main">
         <div className="auth-mobile-brand">

@@ -14,10 +14,10 @@ const api = `
 const call = (name, payload) => { (window.__calls ||= []).push({name,payload}); if(window.__scenario === 'error') throw new Error('Test API unavailable') }
 const now = new Date(); const date = i => { const d=new Date(now); d.setDate(d.getDate()-i); return d.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'}) };
 const devices=[{id:'qa-meter',device_name:'Sample Home Meter',device_code:'DEMO-QA',location:'Demo apartment',status:'online',last_seen:now.toISOString()},{id:'qa-second',device_name:'Second meter',device_code:'SECOND',status:'offline'}];
-export async function getDevices(){call('getDevices');return window.__scenario==='empty'?[]:devices}
-export async function getReadings(){call('getReadings');return window.__scenario==='no-readings'?[]:Array.from({length:12},(_,i)=>({recorded_at:new Date(+now-i*900000).toISOString(),power:200+i*35,energy:.1}))}
-export async function getDailyUsage(){call('getDailyUsage');return window.__scenario==='no-readings'?[]:Array.from({length:35},(_,i)=>({date:date(i),total_energy:8+i%7}))}
-export async function getAlerts(){call('getAlerts');return {month:date(0).slice(0,7),devices:window.__scenario==='empty'?[]:devices,current_usage:326.8,monthly_limit:500,remaining:173.2,usage_percent:65.36,status:'ok',predicted_next_7d_total:86.2,projected_month_total:413,predicted_will_exceed:false}}
+export async function getDevices(){call('getDevices');return window.__scenario==='empty'?[]:devices.map(d=>d.id==='qa-second'?{...d,status:window.__meterStatus||'online',last_seen:new Date(+now+(window.__readingVersion||0)*1000).toISOString()}:d)}
+export async function getReadings(id,options={}){call('getReadings',id);(window.__limits||=[]).push({kind:'readings',limit:options.limit});return window.__scenario==='no-readings'?[]:Array.from({length:Math.min(options.limit||1000,1000)},(_,i)=>({recorded_at:new Date(+now+(window.__readingVersion||0)*1000-i*900000-(window.__readingAgeMs||0)).toISOString(),power:200+(window.__readingVersion||0)*100+i*35,energy:.1}))}
+export async function getDailyUsage(id,options={}){call('getDailyUsage',id);(window.__limits||=[]).push({kind:'daily',limit:options.limit});return window.__scenario==='no-readings'?[]:Array.from({length:Math.min(options.limit||35,35)},(_,i)=>({date:date(i),total_energy:8+i%7}))}
+export async function getAlerts(){call('getAlerts');if(window.__summaryError)throw Error('Test summary error');return {month:date(0).slice(0,7),devices:window.__scenario==='empty'?[]:devices,current_usage:326.8,monthly_limit:500,remaining:173.2,usage_percent:65.36,status:'ok',predicted_next_7d_total:86.2,projected_month_total:413,predicted_will_exceed:false}}
 export async function getUsageSummary(id,range){call('getUsageSummary',{id,range});return {total_energy:window.__scenario==='no-readings'?0:86.2,range}}
 export async function getPredictions(id,range){call('getPredictions',{id,range});return {actual:window.__scenario==='no-readings'?[]:[8,9,11,10,13,12,14],predicted:[12,14,13,16,15,17,18]}}
 export async function getUsageAnomaly(){call('getUsageAnomaly');return {status:'normal',score:.23,sample_size:35}}
@@ -97,7 +97,7 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
     "/create-account",
   ];
   let layouts = 0;
-  for (const width of [320, 390, 768, 1440, 844]) {
+  for (const width of [320, 360, 390, 430, 768, 1440, 844]) {
     await page.setViewportSize({ width, height: width === 844 ? 390 : 900 });
     for (const route of routes) {
       await page.goto("http://127.0.0.1:5174" + route);
@@ -124,23 +124,38 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
           path: path.join(output, `${route.slice(1) || "home"}-${width}.png`),
           fullPage: true,
         });
+      assert.equal(
+        await page
+          .getByRole("button", {
+            name: /(?:load|upload|generate|insert).*(?:sample|demo)/i,
+          })
+          .count(),
+        0,
+      );
       layouts++;
     }
   }
+  await page.goto("http://127.0.0.1:5174/");
+  await page.waitForFunction(() =>
+    window.__calls.some(
+      (c) => c.name === "getReadings" && c.payload === "qa-second",
+    ),
+  );
+  await page.getByText("Latest reading", { exact: true }).waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("http://127.0.0.1:5174/profile");
   await page
-    .getByRole("button", { name: "Personal Information", exact: true })
+    .getByRole("button", { name: "Personal information", exact: true })
     .click();
   await page.getByRole("dialog").waitFor();
-  await page.getByLabel("Full Name", { exact: true }).fill("Updated UI name");
-  await page.getByRole("button", { name: "Save Changes", exact: true }).click();
+  await page.getByLabel("Full name", { exact: true }).fill("Updated UI name");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.getByRole("heading", { name: "Updated UI name" }).waitFor();
   await page
-    .getByRole("button", { name: "Monthly Limit", exact: true })
+    .getByRole("button", { name: "Monthly limit", exact: true })
     .click();
   await page.getByRole("spinbutton").fill("650");
-  await page.getByRole("button", { name: "Save Limit", exact: true }).click();
+  await page.getByRole("button", { name: "Save limit", exact: true }).click();
   assert.ok(
     await page.evaluate(() =>
       window.__calls.some(
@@ -154,7 +169,7 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Escape");
   assert.equal(await page.getByRole("dialog").count(), 0);
-  await page.getByRole("switch", { name: "Dark Mode", exact: true }).click();
+  await page.getByRole("switch", { name: "Dark mode", exact: true }).click();
   assert.ok(
     await page.evaluate(() => document.body.classList.contains("light-theme")),
   );
@@ -182,7 +197,7 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
   await page
     .getByRole("switch", { name: "Notifications", exact: true })
     .click();
-  await page.getByRole("button", { name: "Sign Out", exact: true }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   assert.ok(
     await page.evaluate(() => window.__calls.some((c) => c.name === "signOut")),
   );
@@ -194,16 +209,19 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
     .click();
   await page.getByText("TEST-ONLY-PROVISIONING-VALUE").waitFor();
   await page.goto("http://127.0.0.1:5174/analysis");
+  await page.locator('.chart').waitFor();
+  const summaryCallsBeforeRange = await page.evaluate(() => window.__calls.filter(c => ['getDailyUsage', 'getAlerts'].includes(c.name)).length);
   await page.getByRole("button", { name: "Month", exact: true }).click();
   await page.waitForFunction(() =>
     window.__calls.some(
       (c) => c.name === "getPredictions" && c.payload.range === "30D",
     ),
   );
-  await page.getByLabel("Select meter").selectOption("qa-second");
+  assert.equal(await page.evaluate(() => window.__calls.filter(c => ['getDailyUsage', 'getAlerts'].includes(c.name)).length), summaryCallsBeforeRange);
+  await page.getByLabel("Select meter").selectOption("qa-meter");
   await page.waitForFunction(() =>
     window.__calls.some(
-      (c) => c.name === "getPredictions" && c.payload.id === "qa-second",
+      (c) => c.name === "getPredictions" && c.payload.id === "qa-meter",
     ),
   );
   await page.goto("http://127.0.0.1:5174/signin");
@@ -211,10 +229,10 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
     () => (window.__authError = "auth/network-request-failed"),
   );
   await page
-    .getByLabel("Email Address", { exact: true })
+    .getByLabel("Email address", { exact: true })
     .fill("test@example.com");
   await page.getByLabel("Password", { exact: true }).fill("test-only-password");
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page
     .getByText(
       "Unable to connect. Check your internet connection and try again.",
@@ -229,32 +247,113 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
   );
   page.on("dialog", (dialog) => dialog.dismiss());
   await page
-    .getByRole("button", { name: "Forgot Password?", exact: true })
+    .getByRole("button", { name: "Forgot password?", exact: true })
     .click();
   await page.evaluate(() => (window.__authError = null));
-  await page.getByRole("button", { name: "Sign In", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL("http://127.0.0.1:5174/");
   await page.goto("http://127.0.0.1:5174/signin");
   await page.getByRole("button", { name: "Google", exact: true }).click();
   await page.waitForURL("http://127.0.0.1:5174/");
   await page.goto("http://127.0.0.1:5174/create-account");
-  await page.getByLabel("Full Name", { exact: true }).fill("Test user");
+  await page.getByLabel("Full name", { exact: true }).fill("Test user");
   await page
-    .getByLabel("Email Address", { exact: true })
+    .getByLabel("Email address", { exact: true })
     .fill("test@example.com");
   await page.getByLabel("Password", { exact: true }).fill("test-only-password");
-  await page.getByLabel("Confirm Password", { exact: true }).fill("different");
-  await page
-    .getByRole("button", { name: "Create Account", exact: true })
-    .click();
+  await page.getByLabel("Confirm password", { exact: true }).fill("different");
+  await page.getByRole("button", { name: "Sign up", exact: true }).click();
   await page.getByText("Passwords do not match").waitFor();
   await page
-    .getByLabel("Confirm Password", { exact: true })
+    .getByLabel("Confirm password", { exact: true })
     .fill("test-only-password");
-  await page
-    .getByRole("button", { name: "Create Account", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Sign up", exact: true }).click();
   await page.waitForURL("http://127.0.0.1:5174/");
+  // Simulated telemetry and browser lifecycle, with no production requests.
+  const pollingPage = await context.newPage();
+  pollingPage.on("pageerror", (error) => errors.push(error.message));
+  const clockStart = new Date();
+  await pollingPage.clock.install({ time: clockStart });
+  await pollingPage.goto("http://127.0.0.1:5174/");
+  await pollingPage
+    .locator(".meter-summary strong")
+    .filter({ hasText: "0.2 kW" })
+    .waitFor();
+  await pollingPage.clock.pauseAt(new Date(Date.now() + 1000));
+  const counts = () =>
+    pollingPage.evaluate(() =>
+      Object.fromEntries(
+        ["getDevices", "getReadings", "getAlerts", "getDailyUsage"].map(
+          (name) => [
+            name,
+            window.__calls.filter((c) => c.name === name).length,
+          ],
+        ),
+      ),
+    );
+  const initialCounts = await counts();
+  await pollingPage.clock.runFor(16000);
+  assert.equal((await counts()).getDevices, initialCounts.getDevices + 1);
+  assert.equal((await counts()).getReadings, initialCounts.getReadings);
+  assert.equal((await counts()).getAlerts, initialCounts.getAlerts);
+  await pollingPage.evaluate(() => (window.__readingVersion = 1));
+  await pollingPage.clock.runFor(16000);
+  await pollingPage
+    .locator(".meter-summary strong")
+    .filter({ hasText: "0.3 kW" })
+    .waitFor();
+  assert.ok(
+    await pollingPage.evaluate(() =>
+      window.__limits.some(
+        (row) => row.kind === "readings" && row.limit === 24,
+      ),
+    ),
+  );
+  assert.ok(
+    await pollingPage.evaluate(() =>
+      window.__limits.some((row) => row.kind === "daily" && row.limit === 1),
+    ),
+  );
+  await pollingPage.evaluate(() => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  const hiddenCounts = await counts();
+  await pollingPage.clock.runFor(90000);
+  assert.deepEqual(await counts(), hiddenCounts);
+  await pollingPage.evaluate(() => {
+    window.__readingVersion = 2;
+    window.__readingAgeMs = 300000;
+    window.__summaryError = true;
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: false,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await pollingPage.clock.runFor(100);
+  await pollingPage
+    .locator(".meter-summary strong")
+    .filter({ hasText: "0.4 kW" })
+    .waitFor();
+  await pollingPage.getByText("Readings are stale", { exact: true }).waitFor();
+  await pollingPage
+    .getByText(
+      "Usage summary could not refresh. Meter readings update separately.",
+      { exact: true },
+    )
+    .waitFor();
+  await pollingPage.clock.resume();
+  await pollingPage.goto("http://127.0.0.1:5174/profile");
+  await pollingPage.locator("h1").waitFor();
+  const afterLeave = await counts();
+  await pollingPage.clock.runFor(120000);
+  assert.deepEqual(await counts(), afterLeave);
+  await pollingPage.close();
+
   for (const language of ["English", "Hindi", "Tamil", "Telugu"]) {
     await page.evaluate((lang) => {
       localStorage.setItem("wattwatcher_lang", lang);
@@ -285,6 +384,30 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
       await page.goto("http://127.0.0.1:5174" + route);
       await page.waitForTimeout(180);
       assert.equal(
+        await page
+          .getByRole("button", {
+            name: /(?:load|upload|generate|insert).*(?:sample|demo)/i,
+          })
+          .count(),
+        0,
+      );
+      if (scenario === "empty" && route === "/") {
+        await page
+          .getByRole("heading", { name: "No meter connected" })
+          .waitFor();
+        assert.ok(
+          await page
+            .getByRole("link", { name: "Connect meter", exact: true })
+            .count(),
+        );
+        assert.equal(
+          await page.evaluate(() =>
+            window.__calls.some((c) => c.name === "createDemoData"),
+          ),
+          false,
+        );
+      }
+      assert.equal(
         await page.evaluate(
           () => document.documentElement.scrollWidth > innerWidth + 1,
         ),
@@ -298,6 +421,10 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
       layouts,
       screenStates: 12,
       flows: [
+        "bounded telemetry refresh",
+        "hidden tab pause/resume",
+        "summary failure isolation",
+        "polling cleanup",
         "profile",
         "limit",
         "theme",

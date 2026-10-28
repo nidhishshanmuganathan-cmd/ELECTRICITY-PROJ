@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import { useDashboardData } from "../hooks/useDashboardData";
+import { meterStatus } from "../utils/meterStatus";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -13,15 +15,15 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslation, useUnit } from "../utils/translate";
-import {
-  createDemoData,
-  getDevices,
-  getReadings,
-  getAlerts,
-  getDailyUsage,
-} from "../api";
+
 import { useAuth } from "../AuthContext";
-import { energyText, isDemo, localDate, numeric } from "../utils/energy";
+import {
+  dateText,
+  energyText,
+  isDemo,
+  localDate,
+  numeric,
+} from "../utils/energy";
 import { AlertSummary } from "./Alerts";
 import EnergyChart from "./EnergyChart";
 import {
@@ -38,88 +40,38 @@ import {
 } from "./ui";
 
 export default function HomeDashboard() {
-  const { t } = useTranslation(),
+  const { t, currentLanguage } = useTranslation(),
     { unit } = useUnit(),
     { user } = useAuth();
-  const [data, setData] = useState(null),
-    [error, setError] = useState(false),
-    [demoBusy, setDemoBusy] = useState(false),
-    [version, setVersion] = useState(0);
-  useEffect(() => {
-    let active = true,
-      pending = false;
-    async function load() {
-      if (pending || document.hidden) return;
-      pending = true;
-      try {
-        const [devices, alerts] = await Promise.all([
-          getDevices(),
-          getAlerts(),
-        ]);
-        const [readings, daily] = devices.length
-          ? await Promise.all([
-              getReadings(devices[0].id),
-              getDailyUsage(devices[0].id),
-            ])
-          : [[], []];
-        if (active) {
-          setData({ devices, alerts, readings, daily });
-          setError(false);
-        }
-      } catch {
-        if (active) setError(true);
-      } finally {
-        pending = false;
-      }
-    }
-    load();
-    const interval = window.setInterval(load, 15000);
-    document.addEventListener("visibilitychange", load);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", load);
-    };
-  }, [version]);
-  async function loadDemo() {
-    setDemoBusy(true);
-    try {
-      await createDemoData();
-      setVersion((v) => v + 1);
-    } catch {
-      setError(true);
-    } finally {
-      setDemoBusy(false);
-    }
-  }
+  const { data, error, summaryError, offline, now, refresh } = useDashboardData(
+    user?.firebaseUser?.uid,
+  );
   const fmt = (value) => energyText(value, unit);
-  const firstName = (
-    user?.appUser?.full_name ||
-    user?.firebaseUser?.displayName ||
-    ""
-  ).split(" ")[0];
-  const device = data?.devices[0],
+  const device = data?.device,
     alerts = data?.alerts;
-  const today = data?.daily.find(
+  const today = data?.daily?.find(
     (row) => row.date === localDate(user?.appUser?.timezone),
   );
-  const power = [...(data?.readings || [])]
-    .slice(0, 24)
-    .reverse()
-    .filter((r) => numeric(r.power) !== null)
-    .map((r) => ({
-      label: new Date(r.recorded_at).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      value: Number(r.power) / 1000,
-    }));
+  const connectionState = meterStatus(device, data?.readings?.[0], now);
+  const power = useMemo(
+    () =>
+      [...(data?.readings || [])]
+        .slice(0, 24)
+        .reverse()
+        .filter((r) => numeric(r.power) !== null)
+        .map((r) => ({
+          label: new Date(r.recorded_at).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          value: Number(r.power) / 1000,
+        })),
+    [data?.readings],
+  );
   return (
     <>
       <PageHeader
-        eyebrow={t("overview")}
-        title={`${t("greeting")}${firstName ? `, ${firstName}` : ""}.`}
-        description={t("dashboardDescription")}
+        title={t("dashboardDescription")}
         action={
           <Link className="button secondary" to="/devices">
             <Cpu size={16} />
@@ -127,8 +79,18 @@ export default function HomeDashboard() {
           </Link>
         }
       />
-      {error && <ErrorState onRetry={() => setVersion((v) => v + 1)} />}
-      {!data && !error ? (
+      {(error || offline) && (
+        <ErrorState
+          message={t(
+            offline ? "offlinePreview" : data ? "refreshFailed" : "retryHint",
+          )}
+          onRetry={refresh}
+        />
+      )}
+      {summaryError && (
+        <ErrorState message={t("summaryFailed")} onRetry={refresh} />
+      )}
+      {!data && !error && !offline ? (
         <LoadingState />
       ) : (
         data && (
@@ -150,13 +112,6 @@ export default function HomeDashboard() {
                       <Cpu size={16} />
                       {t("connectMeter")}
                     </Link>
-                    <button
-                      className="button secondary"
-                      disabled={demoBusy}
-                      onClick={loadDemo}
-                    >
-                      {demoBusy ? t("sampleDataLoading") : t("sampleData")}
-                    </button>
                   </div>
                 }
               />
@@ -168,39 +123,47 @@ export default function HomeDashboard() {
                       icon={Zap}
                       title={t("thisMonth")}
                       action={
-                        <Badge
-                          tone={
-                            alerts.status === "exceeded"
-                              ? "red"
-                              : alerts.status === "warning"
-                                ? "amber"
-                                : "green"
-                          }
-                        >
-                          {t(
-                            alerts.status === "exceeded"
-                              ? "alertExceeded"
-                              : alerts.status === "warning"
-                                ? "alertWarning"
-                                : "alertOk",
-                          )}
-                        </Badge>
+                        alerts && (
+                          <Badge
+                            tone={
+                              alerts.status === "exceeded"
+                                ? "red"
+                                : alerts.status === "warning"
+                                  ? "amber"
+                                  : "green"
+                            }
+                          >
+                            {t(
+                              alerts.status === "exceeded"
+                                ? "alertExceeded"
+                                : alerts.status === "warning"
+                                  ? "alertWarning"
+                                  : "alertOk",
+                            )}
+                          </Badge>
+                        )
                       }
                     />
-                    <EnergyGauge
-                      value={alerts.current_usage}
-                      limit={alerts.monthly_limit}
-                      format={fmt}
-                      label={t("totalConsumption")}
-                    />
+                    {alerts ? (
+                      <EnergyGauge
+                        value={alerts?.current_usage}
+                        limit={alerts?.monthly_limit}
+                        format={fmt}
+                        label={t("totalConsumption")}
+                      />
+                    ) : (
+                      <p className="summary-placeholder" role="status">
+                        {t(summaryError ? "summaryUnavailable" : "loadingData")}
+                      </p>
+                    )}
                     <div className="gauge-footer">
                       <div>
                         <span>{t("monthlyLimit")}</span>
-                        <strong>{fmt(alerts.monthly_limit)}</strong>
+                        <strong>{fmt(alerts?.monthly_limit)}</strong>
                       </div>
                       <div>
                         <span>{t("remaining")}</span>
-                        <strong>{fmt(alerts.remaining)}</strong>
+                        <strong>{fmt(alerts?.remaining)}</strong>
                       </div>
                     </div>
                     <p className="note text-center">{t("allMeters")}</p>
@@ -213,25 +176,52 @@ export default function HomeDashboard() {
                         action={
                           <Badge
                             tone={
-                              isDemo(device)
-                                ? "amber"
-                                : device.status === "online"
-                                  ? "green"
+                              connectionState === "connected"
+                                ? "green"
+                                : connectionState === "staleReadings"
+                                  ? "amber"
                                   : "neutral"
                             }
                           >
-                            {isDemo(device)
-                              ? t("demo")
-                              : t(
-                                  ["online", "offline"].includes(device.status)
-                                    ? device.status
-                                    : "unknown",
-                                )}
+                            {t(connectionState)}
                           </Badge>
                         }
                       />
                       <p className="small-label">{device.device_name}</p>
-                      {power.length ? (
+                      <div className="meter-summary">
+                        <div>
+                          <span className="small-label">
+                            {t("latestReading")}
+                          </span>
+                          <br />
+                          <strong>
+                            {numeric(data.readings?.[0]?.power) === null
+                              ? "—"
+                              : `${(Number(data.readings[0].power) / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 })} kW`}
+                          </strong>
+                        </div>
+                        <small>
+                          {t("lastReadingReceived")}:{" "}
+                          {dateText(
+                            data.readings?.[0]?.recorded_at,
+                            currentLanguage,
+                          )}
+                          {data.readings?.[0]?.recorded_at
+                            ? ` · ${new Date(data.readings?.[0]?.recorded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                            : ""}
+                        </small>
+                      </div>
+                      {connectionState === "staleReadings" && (
+                        <p className="note mb-3">{t("staleHint")}</p>
+                      )}
+                      {connectionState === "disconnected" && (
+                        <TextLink to="/devices">{t("checkMeter")}</TextLink>
+                      )}
+                      {!data.readingsLoaded && !error ? (
+                        <p className="chart-empty" role="status">
+                          {t("loadingData")}
+                        </p>
+                      ) : power.length ? (
                         <EnergyChart
                           points={power}
                           title={t("recentPower")}
@@ -259,16 +249,6 @@ export default function HomeDashboard() {
                         <ArrowUpRight size={14} className="ml-auto" />
                       </Link>
                     ))}
-                    <button
-                      className="action-tile"
-                      onClick={loadDemo}
-                      disabled={demoBusy}
-                    >
-                      <Sparkles />
-                      <span>
-                        {demoBusy ? t("sampleDataLoading") : t("sampleData")}
-                      </span>
-                    </button>
                   </div>
                 </div>
                 <div className="stats-grid">
@@ -280,21 +260,21 @@ export default function HomeDashboard() {
                   />
                   <Stat
                     icon={CalendarDays}
-                    tone="green"
+                    tone="violet"
                     label={t("thisMonth")}
-                    value={fmt(alerts.current_usage)}
+                    value={fmt(alerts?.current_usage)}
                     hint={t("allMeters")}
                   />
                   <Stat
                     icon={ChartNoAxesCombined}
                     tone="violet"
                     label={t("nextSeven")}
-                    value={fmt(alerts.predicted_next_7d_total)}
+                    value={fmt(alerts?.predicted_next_7d_total)}
                     hint={t("predicted")}
                   />
                   <Stat
                     icon={Wallet}
-                    tone="amber"
+                    tone="violet"
                     label={t("costEstimate")}
                     value="—"
                     hint={t("tariffMissing")}
@@ -307,13 +287,19 @@ export default function HomeDashboard() {
                       title={t("usageAlerts")}
                       action={<TextLink to="/alerts">{t("viewAll")}</TextLink>}
                     />
-                    <AlertSummary alerts={alerts} />
+                    {alerts ? (
+                      <AlertSummary alerts={alerts} />
+                    ) : (
+                      <p className="note">
+                        {t(summaryError ? "summaryUnavailable" : "loadingData")}
+                      </p>
+                    )}
                   </Card>
                   <Card className="insight-hero">
                     <CardTitle icon={Sparkles} title={t("aiCoach")} />
                     <p className="small-label">{t("projectedTotal")}</p>
                     <p className="large-number">
-                      {fmt(alerts.projected_month_total)}
+                      {fmt(alerts?.projected_month_total)}
                     </p>
                     <p className="muted text-xs leading-relaxed">
                       {t("forecastNote")}

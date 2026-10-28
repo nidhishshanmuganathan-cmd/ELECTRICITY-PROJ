@@ -41,14 +41,16 @@ export default function Insights() {
   useEffect(() => {
     if (!meter.id) return;
     let active = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
     setLoading(true);
     setError(false);
     Promise.all([
-      getAlerts(),
-      getUsageSummary(meter.id, "7D"),
-      getPredictions(meter.id, "7D"),
-      getUsageAnomaly(meter.id),
-      getDailyUsage(meter.id),
+      getAlerts(options),
+      getUsageSummary(meter.id, "7D", options),
+      getPredictions(meter.id, "7D", options),
+      getUsageAnomaly(meter.id, options),
+      getDailyUsage(meter.id, { ...options, limit: 7 }),
     ])
       .then(([alerts, summary, forecast, anomaly, daily]) => {
         if (active) setData({ alerts, summary, forecast, anomaly, daily });
@@ -61,6 +63,7 @@ export default function Insights() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [meter.id, revision]);
   const risk =
@@ -89,9 +92,7 @@ export default function Insights() {
   return (
     <>
       <PageHeader
-        eyebrow={t("insights")}
         title={t("aiCoach")}
-        description={t("analysisDescription")}
         action={
           <MeterSelect
             devices={meter.devices}

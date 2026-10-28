@@ -95,9 +95,8 @@ export default function CreateAccount() {
   };
   return (
     <AuthLayout>
-      <p className="eyebrow">{t("smartEnergy")}</p>
       <h1>{t("letsGetStarted")}</h1>
-      <p className="auth-description">{t("everyWattCounts")}</p>
+      <p className="auth-description">{t("signupDescription")}</p>
       <form onSubmit={handleSubmit}>
         <AuthInput
           label={t("fullName")}

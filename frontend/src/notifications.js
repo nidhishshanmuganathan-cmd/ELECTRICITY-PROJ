@@ -1,4 +1,3 @@
-import { deleteToken, getToken, onMessage } from 'firebase/messaging'
 import { getMessagingInstance, VAPID_KEY } from './firebase'
 import { registerDeviceToken, unregisterDeviceToken } from './api'
 import { auth } from './firebase'
@@ -9,7 +8,10 @@ export async function disablePushNotifications() {
   const token = localStorage.getItem(`${preferenceKey()}_token`)
   if (token) await unregisterDeviceToken(token)
   const messaging = await getMessagingInstance()
-  if (messaging) await deleteToken(messaging)
+  if (messaging) {
+    const { deleteToken } = await import('firebase/messaging')
+    await deleteToken(messaging)
+  }
   localStorage.setItem(preferenceKey(), 'disabled')
   localStorage.removeItem(`${preferenceKey()}_token`)
 }
@@ -26,7 +28,8 @@ export async function disablePushNotifications() {
  */
 let foregroundListenerAttached = false
 
-function attachForegroundListener(messaging) {
+async function attachForegroundListener(messaging) {
+  const { onMessage } = await import('firebase/messaging')
   // Attach once per page load; permission is already granted at this point.
   if (foregroundListenerAttached) {
     return
@@ -82,6 +85,7 @@ export async function ensureForegroundListener() {
       registration = await navigator.serviceWorker.ready
       console.log('[FCM] service worker ready | scope=' + registration.scope)
     }
+    const { getToken } = await import('firebase/messaging')
     const token = await getToken(
       messaging,
       registration
@@ -94,7 +98,7 @@ export async function ensureForegroundListener() {
       await registerDeviceToken(token)
       localStorage.setItem(`${preferenceKey()}_token`, token)
     }
-    attachForegroundListener(messaging)
+    await attachForegroundListener(messaging)
     return true
   } catch (err) {
     console.error('Push token refresh failed; enable notifications again')
@@ -141,7 +145,7 @@ export async function enablePushNotifications() {
     if (!messaging) {
       return { ok: false, message: 'Push messaging is not supported in this browser.' }
     }
-    attachForegroundListener(messaging)
+    await attachForegroundListener(messaging)
 
     let registration = null
     if ('serviceWorker' in navigator) {
@@ -153,6 +157,7 @@ export async function enablePushNotifications() {
     }
 
     console.log('[FCM] calling getToken...')
+    const { getToken } = await import('firebase/messaging')
     const token = await getToken(
       messaging,
       registration

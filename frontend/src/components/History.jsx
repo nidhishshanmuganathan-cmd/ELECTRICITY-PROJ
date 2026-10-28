@@ -43,9 +43,11 @@ export default function History() {
   useEffect(() => {
     if (!meter.id) return;
     let active = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
     setLoading(true);
     setError(false);
-    getDailyUsage(meter.id)
+    getDailyUsage(meter.id, { ...options, limit: 90 })
       .then((rows) => {
         if (active) setRecords(dailyPoints(rows));
       })
@@ -57,6 +59,7 @@ export default function History() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [meter.id, revision]);
   const end = localDate(),
@@ -73,9 +76,7 @@ export default function History() {
   return (
     <>
       <PageHeader
-        eyebrow={t("measuredEnergy")}
-        title={t("history")}
-        description={t("historyDescription")}
+        title={t("usageHistory")}
         action={
           <MeterSelect
             devices={meter.devices}
@@ -141,7 +142,7 @@ export default function History() {
                   label={t("highestDay")}
                   value={fmt(Math.max(...visible.map((p) => p.value)))}
                   icon={TrendingUp}
-                  tone="amber"
+                  tone="violet"
                 />
                 <Stat
                   label={t("records")}

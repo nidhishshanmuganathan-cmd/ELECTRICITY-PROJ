@@ -10,8 +10,12 @@ export const dailyPoints = (rows) =>
     .filter((row) => finite(row.total_energy))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((row) => ({ label: row.date, value: Number(row.total_energy) }));
-export const isDemo = (device) =>
-  !!device?.device_code?.startsWith("DEMO-");
+export const isDemo = (device) => !!device?.device_code?.startsWith("DEMO-");
+// Prefer hardware without hiding stored sample meters from the selector.
+export const preferredMeter = (devices) =>
+  devices.find((device) => !isDemo(device) && device.status === "online") ||
+  devices.find((device) => !isDemo(device)) ||
+  devices[0];
 export function localDate(timeZone = "Asia/Kolkata") {
   try {
     return new Intl.DateTimeFormat("en-CA", {

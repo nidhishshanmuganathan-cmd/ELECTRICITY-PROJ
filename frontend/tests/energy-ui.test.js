@@ -6,6 +6,7 @@ import {
   numeric,
   isDemo,
   dateText,
+  preferredMeter,
 } from "../src/utils/energy.js";
 import { uiTranslations } from "../src/utils/uiTranslations.js";
 
@@ -40,6 +41,18 @@ test("sample devices use the verified backend demo code convention", () => {
     false,
   );
   assert.equal(isDemo(null), false);
+});
+
+test("default meter favors real hardware while retaining sample-only and empty states", () => {
+  const sample = { id: "sample", device_code: "DEMO-1", status: "online" };
+  const offline = { id: "offline", device_code: "ESP32-1", status: "offline" };
+  const online = { id: "online", device_code: "ESP32-2", status: "online" };
+  const devices = [sample, offline, online];
+  assert.equal(preferredMeter(devices), online);
+  assert.equal(preferredMeter([sample, offline]), offline);
+  assert.equal(preferredMeter([sample]), sample);
+  assert.equal(preferredMeter([]), undefined);
+  assert.deepEqual(devices, [sample, offline, online]);
 });
 
 test("all added interface keys exist in each supported language", () => {

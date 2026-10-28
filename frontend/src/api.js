@@ -1,9 +1,10 @@
 import { auth } from './firebase'
 
-// Keep local development zero-config while allowing a deployed frontend to
-// point at its own API without a source-code change.
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL?.trim() ||
-  (import.meta.env.PROD ? 'https://electricity-proj.onrender.com' : 'http://127.0.0.1:8000')).replace(/\/+$/, '')
+// Development requests stay on the page's origin. Vite forwards them to
+// VITE_API_BASE_URL, so a phone never tries to reach its own loopback address.
+// Production continues to call the configured HTTPS backend directly.
+const API_BASE_URL = (import.meta.env.DEV ? '/api' :
+  (import.meta.env.VITE_API_BASE_URL?.trim() || 'https://electricity-proj.onrender.com')).replace(/\/+$/, '')
 
 async function apiRequest(path, options = {}) {
   const user = auth.currentUser
@@ -46,8 +47,8 @@ export function addDevice(deviceData) {
   })
 }
 
-export function getDevices() {
-  return apiRequest('/devices/')
+export function getDevices(options = {}) {
+  return apiRequest('/devices/', options)
 }
 
 export function provisionDeviceToken(deviceId) {
@@ -58,32 +59,32 @@ export function createDemoData() {
   return apiRequest('/devices/demo-data', { method: 'POST' })
 }
 
-export function getReadings(deviceId) {
-  return apiRequest(`/devices/${deviceId}/readings/`)
+export function getReadings(deviceId, { limit, ...options } = {}) {
+  return apiRequest(`/devices/${deviceId}/readings/${limit ? `?limit=${limit}` : ''}`, options)
 }
 
-export function getDailyUsage(deviceId) {
-  return apiRequest(`/devices/${deviceId}/readings/daily`)
+export function getDailyUsage(deviceId, { limit, ...options } = {}) {
+  return apiRequest(`/devices/${deviceId}/readings/daily${limit ? `?limit=${limit}` : ''}`, options)
 }
 
 export function getMonthlyUsage(deviceId) {
   return apiRequest(`/devices/${deviceId}/readings/monthly`)
 }
 
-export async function getPredictions(deviceId, range = '7D') {
-  return apiRequest(`/devices/${deviceId}/readings/predictions?range=${range}`)
+export async function getPredictions(deviceId, range = '7D', options = {}) {
+  return apiRequest(`/devices/${deviceId}/readings/predictions?range=${range}`, options)
 }
 
-export function getUsageAnomaly(deviceId) {
-  return apiRequest(`/devices/${deviceId}/readings/anomaly`)
+export function getUsageAnomaly(deviceId, options = {}) {
+  return apiRequest(`/devices/${deviceId}/readings/anomaly`, options)
 }
 
-export async function getUsageSummary(deviceId, range) {
-  return apiRequest(`/devices/${deviceId}/readings/summary?range=${range}`)
+export async function getUsageSummary(deviceId, range, options = {}) {
+  return apiRequest(`/devices/${deviceId}/readings/summary?range=${range}`, options)
 }
 
-export function getAlerts() {
-  return apiRequest('/users/me/alerts')
+export function getAlerts(options = {}) {
+  return apiRequest('/users/me/alerts', options)
 }
 
 export function updateUserProfile(userData) {

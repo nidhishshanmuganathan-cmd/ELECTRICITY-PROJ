@@ -198,11 +198,7 @@ export default function Profile() {
   ];
   return (
     <>
-      <PageHeader
-        eyebrow={t("account")}
-        title={t("profile")}
-        description={t("profileDescription")}
-      />
+      <PageHeader title={t("account")} />
       {message && (
         <div className="toast mb-5" role="status">
           <Check size={18} />

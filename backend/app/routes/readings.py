@@ -1,5 +1,5 @@
 from sqlalchemy import func
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
@@ -115,10 +115,14 @@ def get_daily_usage(
     device_id: uuid.UUID,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
+    limit: int | None = Query(default=None, ge=1, le=1000),
 ):
     get_owned_device(device_id, current_user, db)
 
-    return db.query(DailyUsage).filter(DailyUsage.device_id == device_id).order_by(DailyUsage.date.desc()).all()
+    query = db.query(DailyUsage).filter(DailyUsage.device_id == device_id).order_by(DailyUsage.date.desc())
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
 
 @router.get("/monthly", response_model=list[MonthlyUsageOut], tags=["readings"])
 def get_monthly_usage(
@@ -179,11 +183,14 @@ def get_readings(
     device_id: uuid.UUID,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
+    limit: int | None = Query(default=None, ge=1, le=1000),
 ):
     get_owned_device(device_id, current_user, db)
-    return (
+    query = (
         db.query(MeterReading)
         .filter(MeterReading.device_id == device_id)
         .order_by(MeterReading.recorded_at.desc())
-        .all()
     )
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()

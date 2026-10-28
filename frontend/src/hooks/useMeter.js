@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getDevices } from "../api";
+import { preferredMeter } from "../utils/energy";
 
 export function useMeter() {
   const [devices, setDevices] = useState([]),
@@ -9,14 +10,18 @@ export function useMeter() {
     [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
     setLoading(true);
     setError(false);
-    getDevices()
+    getDevices(options)
       .then((rows) => {
         if (active) {
           setDevices(rows);
           setId((previous) =>
-            rows.some((d) => d.id === previous) ? previous : rows[0]?.id || "",
+            rows.some((d) => d.id === previous)
+              ? previous
+              : preferredMeter(rows)?.id || "",
           );
         }
       })
@@ -28,6 +33,7 @@ export function useMeter() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [revision]);
   return {

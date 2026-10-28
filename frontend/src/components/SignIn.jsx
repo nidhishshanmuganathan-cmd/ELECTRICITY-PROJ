@@ -85,7 +85,6 @@ export default function SignIn() {
 
   return (
     <AuthLayout>
-      <p className="eyebrow">{t("smartEnergy")}</p>
       <h1>{t("welcomeBack")}</h1>
       <p className="auth-description">{t("signInToTrack")}</p>
       <form onSubmit={handleSubmit}>

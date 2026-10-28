@@ -1,3 +1,4 @@
+import { meterStatus } from "../utils/meterStatus";
 import { useEffect, useState } from "react";
 import { Check, Copy, Cpu, Plus, Radio, Sparkles } from "lucide-react";
 import { addDevice, getDevices, provisionDeviceToken } from "../api";
@@ -99,9 +100,7 @@ export default function Devices() {
   return (
     <>
       <PageHeader
-        eyebrow={t("workspace")}
-        title={t("devices")}
-        description={t("devicesDescription")}
+        title={t("yourMeters")}
         action={
           <Badge tone="blue">
             <Cpu size={13} />
@@ -199,19 +198,13 @@ export default function Devices() {
                     <Badge
                       tone={
                         isDemo(d)
-                          ? "amber"
-                          : d.status === "online"
+                          ? "neutral"
+                          : meterStatus(d) === "connected"
                             ? "green"
                             : "neutral"
                       }
                     >
-                      {isDemo(d)
-                        ? t("demo")
-                        : t(
-                            ["online", "offline"].includes(d.status)
-                              ? d.status
-                              : "unknown",
-                          )}
+                      {isDemo(d) ? t("demo") : t(meterStatus(d))}
                     </Badge>
                   </div>
                   <p>
@@ -224,7 +217,7 @@ export default function Devices() {
                       ? ` · ${new Date(d.last_seen).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                       : ""}
                   </p>
-                  {isDemo(d) && <p className="tone-amber">{t("demoNote")}</p>}
+                  {isDemo(d) && <p className="muted">{t("demoNote")}</p>}
                 </div>
               ))}
             </div>

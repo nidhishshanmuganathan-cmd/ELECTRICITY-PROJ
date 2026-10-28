@@ -1,30 +1,49 @@
-import { useId, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "../utils/translate";
 
 // SVG stays responsive; a range input gives touch and keyboard access to every point.
-export default function EnergyChart({
-  points = [],
-  forecast = [],
+const EMPTY_POINTS = [];
+function EnergyChart({
+  points = EMPTY_POINTS,
+  forecast = EMPTY_POINTS,
   unit = "kWh",
   title,
   type = "line",
 }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(null);
+  const container = useRef(null);
+  const [chartWidth, setChartWidth] = useState(720);
+  useEffect(() => {
+    if (!container.current) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setChartWidth(Math.max(300, Math.round(entry.contentRect.width)));
+    });
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, []);
   const id = useId().replace(/:/g, "");
-  const all = [
-    ...points.map((p) => ({ ...p, forecast: false })),
-    ...forecast.map((p) => ({ ...p, forecast: true })),
-  ];
-  if (!all.length)
-    return <div className="chart-empty">{t("noReadingsFound")}</div>;
-  const width = 720,
-    height = 230,
+  const all = useMemo(
+    () => [
+      ...points.map((p) => ({ ...p, forecast: false })),
+      ...forecast.map((p) => ({ ...p, forecast: true })),
+    ],
+    [points, forecast],
+  );
+  const width = chartWidth,
+    height = chartWidth < 500 ? 190 : 230,
     left = 52,
     right = 15,
     top = 22,
     bottom = 34;
-  const max = Math.max(...all.map((p) => Number(p.value) || 0), 0.01) * 1.15;
+  const max = useMemo(
+    () =>
+      all.reduce(
+        (peak, point) => Math.max(peak, Number(point.value) || 0),
+        0.01,
+      ) * 1.15,
+    [all],
+  );
   const x = (i) =>
     left +
     (all.length === 1 ? 0.5 : i / (all.length - 1)) * (width - left - right);
@@ -40,8 +59,32 @@ export default function EnergyChart({
     Number(value).toLocaleString(undefined, {
       maximumFractionDigits: unit === "MWh" ? 3 : 2,
     });
+  const paths = useMemo(
+    () => ({
+      observed: path(points),
+      area: points.length
+        ? `${path(points)} L ${x(points.length - 1)} ${height - bottom} L ${x(0)} ${height - bottom} Z`
+        : "",
+      forecast: path(
+        points.length ? [points.at(-1), ...forecast] : forecast,
+        Math.max(0, points.length - 1),
+      ),
+    }),
+    [points, forecast, all.length, max, width, height],
+  );
+  const chartLabel = useMemo(
+    () =>
+      `${title}. ${all.map((p) => `${p.label}: ${format(p.value)} ${unit}`).join("; ")}`,
+    [title, all, unit],
+  );
+  if (!all.length)
+    return (
+      <div ref={container} className="chart-empty">
+        {t("noReadingsFound")}
+      </div>
+    );
   return (
-    <div className="chart">
+    <div ref={container} className="chart">
       <div className="chart-readout" aria-live="polite">
         <span>
           {point.label} · {t(point.forecast ? "predicted" : "measuredEnergy")}
@@ -53,7 +96,7 @@ export default function EnergyChart({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`${title}. ${all.map((p) => `${p.label}: ${format(p.value)} ${unit}`).join("; ")}`}
+        aria-label={chartLabel}
         onPointerMove={(event) => {
           const bounds = event.currentTarget.getBoundingClientRect();
           const position =
@@ -74,8 +117,8 @@ export default function EnergyChart({
       >
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop stopColor="#38BDF8" stopOpacity=".24" />
-            <stop offset="1" stopColor="#38BDF8" stopOpacity="0" />
+            <stop stopColor="var(--primary)" stopOpacity=".24" />
+            <stop offset="1" stopColor="var(--primary)" stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0, 0.5, 1].map((f) => (
@@ -102,7 +145,11 @@ export default function EnergyChart({
               height={Math.max(0, height - bottom - y(p.value))}
               rx="4"
               fill={
-                p.forecast ? "#A78BFA" : i === index ? "#38BDF8" : "#3B82F6"
+                p.forecast
+                  ? "var(--violet-light)"
+                  : i === index
+                    ? "var(--cyan)"
+                    : "var(--primary)"
               }
               opacity={i === index ? 1 : 0.65}
             />
@@ -111,21 +158,12 @@ export default function EnergyChart({
           <>
             {points.length > 0 && (
               <>
-                <path
-                  d={`${path(points)} L ${x(points.length - 1)} ${height - bottom} L ${x(0)} ${height - bottom} Z`}
-                  fill={`url(#${id})`}
-                />
-                <path d={path(points)} className="chart-line" />
+                <path d={paths.area} fill={`url(#${id})`} />
+                <path d={paths.observed} className="chart-line" />
               </>
             )}
             {forecast.length > 0 && (
-              <path
-                d={path(
-                  points.length ? [points.at(-1), ...forecast] : forecast,
-                  Math.max(0, points.length - 1),
-                )}
-                className="chart-forecast"
-              />
+              <path d={paths.forecast} className="chart-forecast" />
             )}
           </>
         )}
@@ -134,7 +172,7 @@ export default function EnergyChart({
           x2={x(index)}
           y1={top}
           y2={height - bottom}
-          stroke="#94A3B8"
+          stroke="var(--muted)"
           strokeDasharray="3 5"
           opacity=".45"
         />
@@ -142,7 +180,7 @@ export default function EnergyChart({
           cx={x(index)}
           cy={y(point.value)}
           r="5"
-          fill={point.forecast ? "#A78BFA" : "#38BDF8"}
+          fill="var(--cyan)"
           stroke="var(--surface)"
           strokeWidth="3"
         />
@@ -189,3 +227,4 @@ export default function EnergyChart({
     </div>
   );
 }
+export default memo(EnergyChart);

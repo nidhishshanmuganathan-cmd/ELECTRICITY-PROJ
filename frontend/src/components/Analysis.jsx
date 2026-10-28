@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BrainCircuit,
   ChartNoAxesCombined,
@@ -30,6 +30,7 @@ import {
 } from "./ui";
 
 export default function Analysis() {
+  const recentSummary = useRef(null);
   const { t, currentLanguage } = useTranslation(),
     { unit } = useUnit(),
     meter = useMeter();
@@ -41,16 +42,33 @@ export default function Analysis() {
   useEffect(() => {
     if (!meter.id) return;
     let active = true;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
     setLoading(true);
     setError(false);
+    const cached = recentSummary.current;
+    const reuse =
+      cached?.id === meter.id &&
+      cached.revision === revision &&
+      Date.now() - cached.at < 60000;
     Promise.all([
-      getUsageSummary(meter.id, range),
-      getPredictions(meter.id, range),
-      getDailyUsage(meter.id),
-      getAlerts(),
+      getUsageSummary(meter.id, range, options),
+      getPredictions(meter.id, range, options),
+      reuse ? cached.daily : getDailyUsage(meter.id, { ...options, limit: 90 }),
+      reuse ? cached.alerts : getAlerts(options),
     ])
       .then(([summary, forecast, daily, alerts]) => {
-        if (active) setData({ summary, forecast, daily, alerts });
+        if (active) {
+          if (!reuse)
+            recentSummary.current = {
+              id: meter.id,
+              revision,
+              at: Date.now(),
+              daily,
+              alerts,
+            };
+          setData({ summary, forecast, daily, alerts });
+        }
       })
       .catch(() => {
         if (active) setError(true);
@@ -60,6 +78,7 @@ export default function Analysis() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [meter.id, range, revision]);
   const observed = dailyPoints(data?.daily || []).slice(
@@ -78,9 +97,7 @@ export default function Analysis() {
   return (
     <>
       <PageHeader
-        eyebrow={t("energyWorkspace")}
-        title={t("analysis")}
-        description={t("analysisDescription")}
+        title={t("usageTrends")}
         action={
           <MeterSelect
             devices={meter.devices}
