@@ -3,7 +3,7 @@ import { ArrowLeft, Zap, Brain, Lightbulb, Thermometer, Timer, TrendingUp } from
 import { useNavigate } from 'react-router-dom'
 import { BottomNav } from './HomeDashboard'
 import { useTranslation, useUnit } from '../utils/translate'
-import { getDevices, getMonthlyUsage, getPredictions, getUsageSummary } from '../api'
+import { getDevices, getPredictions, getUsageSummary } from '../api'
 import { useAuth } from '../AuthContext'
 
 export default function Analysis() {
@@ -73,35 +73,56 @@ export default function Analysis() {
   const labels = chartData.length <= 7
     ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Today']
     : ['Start', '...', 'Today']
-  const predictedLabels = ['Today', 'Thu', 'Fri', 'Sat']
+  const predictedLabels = predData.map((_, i) => `+${i + 1}D`)
 
-  const chartW = 340
-  const chartH = 140
-  const padX = 10
-  const padY = 10
-  const allValues = [...chartData, ...predData]
-  const minVal = Math.min(...allValues) - 30
-  const maxVal = Math.max(...allValues) + 20
-  const range = maxVal - minVal === 0 ? 1 : maxVal - minVal
+  const chartW = 380
+const chartH = 140
+const padX = 10
+const padY = 10
 
-  const toX = (i, total) => padX + (i / (total > 1 ? total - 1 : 1)) * (chartW - 2 * padX)
-  const toY = (v) => padY + ((maxVal - v) / range) * (chartH - 2 * padY)
+const allValues = [...chartData, ...predData]
 
-  const actualPoints = chartData.map((v, i) => `${toX(i, chartData.length)},${toY(v)}`).join(' ')
-  const predXStart = toX(chartData.length - 1, chartData.length)
-  const totalPredPoints = predData.length
-  const predPoints = predData.map((v, i) => {
-    const x = predXStart + (i / (totalPredPoints > 1 ? totalPredPoints - 1 : 1)) * (chartW - padX - predXStart)
+const minVal = Math.min(...allValues) - 30
+const maxVal = Math.max(...allValues) + 20
+
+const range = maxVal - minVal === 0 ? 1 : maxVal - minVal
+
+const toX = (i, total) =>
+  padX + (i / (total > 1 ? total - 1 : 1)) * (chartW - 2 * padX)
+
+const toY = (v) =>
+  padY + ((maxVal - v) / range) * (chartH - 2 * padY)
+
+const actualPoints = chartData
+  .map((v, i) => `${toX(i, chartData.length)},${toY(v)}`)
+  .join(' ')
+
+const forecastStartX = chartW * 0.68
+const predXStart = forecastStartX
+
+const totalPredPoints = predData.length
+
+const predPoints = predData
+  .map((v, i) => {
+    const x =
+      predXStart +
+      (i / (totalPredPoints > 1 ? totalPredPoints - 1 : 1)) *
+        (chartW - padX - predXStart)
+
     return `${x},${toY(v)}`
-  }).join(' ')
+  })
+  .join(' ')
 
-  const areaPath = chartData.length > 0 ? (
-    `M ${toX(0, chartData.length)},${chartH - padY} ` +
-    chartData.map((v, i) => `L ${toX(i, chartData.length)},${toY(v)}`).join(' ') +
-    ` L ${toX(chartData.length - 1, chartData.length)},${chartH - padY} Z`
-  ) : ''
+const areaPath =
+  chartData.length > 0
+    ? `M ${toX(0, chartData.length)},${chartH - padY} ` +
+      chartData
+        .map((v, i) => `L ${toX(i, chartData.length)},${toY(v)}`)
+        .join(' ') +
+      ` L ${toX(chartData.length - 1, chartData.length)},${chartH - padY} Z`
+    : ''
 
-  const limitY = toY(monthlyLimit)
+const limitY = toY(monthlyLimit)
 
   const tips = [
     {

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth import get_current_user
@@ -7,8 +7,22 @@ from app.models.user import User
 from app.schemas.alerts import AlertsOut
 from app.schemas.user import DeviceTokenIn, DeviceTokenOut, UserOut
 from app.services.alerts import AlertService
+from app.services.fcm import FCMService
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.delete("/me/device-token")
+def remove_device_token(
+    token_data: DeviceTokenIn,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.firebase_uid == current_user["uid"]).first()
+    if user and user.fcm_token == token_data.fcm_token:
+        user.fcm_token = None
+        db.commit()
+    return {"success": True}
 
 
 @router.get("/me", response_model=UserOut)
@@ -45,10 +59,10 @@ def get_me(
 
 
 class UserUpdate(BaseModel):
-    full_name: str | None = None
-    phone: str | None = None
-    address: str | None = None
-    monthly_limit: float | None = None
+    full_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
+    address: str | None = Field(default=None, max_length=255)
+    monthly_limit: float | None = Field(default=None, gt=0, le=100_000)
 
 
 @router.get("/me/alerts", response_model=AlertsOut)
@@ -117,6 +131,24 @@ def test_notification(
     return result
 
 
+@router.post("/me/push-test")
+def send_push_test(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Send a user-initiated delivery check to the current device."""
+    user = db.query(User).filter(User.firebase_uid == current_user["uid"]).first()
+    if user is None or not user.fcm_token:
+        raise HTTPException(status_code=409, detail="Enable notifications on this device first")
+
+    message_id = FCMService.notify_user(
+        db, user.id, "WattWatcher is ready", "Test notification delivered successfully."
+    )
+    if not message_id:
+        raise HTTPException(status_code=502, detail="Notification could not be delivered")
+    return {"success": True}
+
+
 @router.put("/me", response_model=UserOut)
 def update_me(
     user_data: UserUpdate,
@@ -130,7 +162,7 @@ def update_me(
     if not user:
         user = User(
             firebase_uid=firebase_uid,
-            full_name=user_data.full_name,
+            full_name=user_data.full_name or current_user.get('name', 'New User'),
             email=current_user.get("email"),
             phone=user_data.phone,
             address=user_data.address,

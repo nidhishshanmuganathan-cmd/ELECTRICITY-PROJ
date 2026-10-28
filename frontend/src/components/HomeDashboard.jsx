@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Zap, Home, BarChart3, FileText, Clock, User,
-  TrendingUp, TrendingDown, IndianRupee, Activity,
+  Zap, Home, BarChart3, BrainCircuit, Clock, User, Cpu,
+  TrendingUp, Activity,
   CheckCircle2, AlertTriangle, AlertOctagon, RefreshCw
 } from 'lucide-react'
 import { useTranslation, useUnit } from '../utils/translate'
@@ -15,7 +15,7 @@ function BottomNav({ active }) {
     { icon: Home, label: t('home'), rawLabel: 'Home', path: '/' },
     { icon: Clock, label: t('history'), rawLabel: 'History', path: '/history' },
     { icon: BarChart3, label: t('analysis'), rawLabel: 'Analysis', path: '/analysis' },
-    { icon: FileText, label: t('bill'), rawLabel: 'Bill', path: '/bill' },
+    { icon: BrainCircuit, label: t('insights'), rawLabel: 'Insights', path: '/insights' },
     { icon: User, label: t('profile'), rawLabel: 'Profile', path: '/profile' },
   ]
 
@@ -210,7 +210,6 @@ export default function HomeDashboard() {
   const { user } = useAuth()
   const monthlyLimit = user?.appUser?.monthly_limit ?? 500
   const [energy, setEnergy] = useState(null)
-  const [bill, setBill] = useState(null)
   const [readings, setReadings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -239,8 +238,6 @@ export default function HomeDashboard() {
           setError(null)
           setEnergy(latest.energy)
 
-          // Rate from BillEstimation: 0.26 per unit
-          setBill(latest.energy * 0.26)
           setReadings(data.slice(0, 12).reverse()) // Last 12 readings for the chart
         } else {
           if (isMounted) setError(t('noReadingsFound') || 'No readings found for this device.')
@@ -348,13 +345,16 @@ export default function HomeDashboard() {
             </div>
             <p className="text-white font-medium">{error}</p>
             {(error.toLowerCase().includes('device') || error.toLowerCase().includes('meter')) && (
-              <button
-                onClick={handleLoadDemo}
-                disabled={loadingDemo}
-                className="rounded-lg bg-electric px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {loadingDemo ? 'Loading sample data…' : 'Load sample data'}
-              </button>
+              <div className="flex flex-col items-center gap-3">
+                <Link to="/devices" className="inline-flex items-center gap-2 rounded-lg bg-electric px-4 py-2 text-sm font-medium text-white"><Cpu size={16} />Connect a meter</Link>
+                <button
+                  onClick={handleLoadDemo}
+                  disabled={loadingDemo}
+                  className="text-sm font-medium text-electric underline disabled:opacity-50"
+                >
+                  {loadingDemo ? 'Loading sample data…' : 'Or load sample data'}
+                </button>
+              </div>
             )}
             <button
               onClick={() => window.location.reload()}
@@ -432,19 +432,7 @@ export default function HomeDashboard() {
               </div>
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="glass rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <IndianRupee size={16} className="text-electric" />
-                  <span className="text-xs text-gray-400">{t('estBill')}</span>
-                </div>
-                <p className="text-xl font-bold text-white">₹{bill != null ? Number(bill).toFixed(2) : '0.00'}</p>
-                <div className="flex items-center gap-1 mt-1">
-                  <TrendingDown size={12} className="text-green-400" />
-                  <span className="text-[10px] text-green-400">-5.2%</span>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 gap-3">
               <div className="glass rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Zap size={16} className="text-yellow-400" />

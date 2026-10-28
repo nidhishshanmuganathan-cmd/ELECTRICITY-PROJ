@@ -1,6 +1,18 @@
-import { getToken, onMessage } from 'firebase/messaging'
+import { deleteToken, getToken, onMessage } from 'firebase/messaging'
 import { getMessagingInstance, VAPID_KEY } from './firebase'
-import { registerDeviceToken } from './api'
+import { registerDeviceToken, unregisterDeviceToken } from './api'
+import { auth } from './firebase'
+
+const preferenceKey = () => `wattwatcher_push_${auth.currentUser?.uid}`
+export const pushEnabled = () => typeof Notification !== 'undefined' && Notification.permission === 'granted' && localStorage.getItem(preferenceKey()) === 'enabled'
+export async function disablePushNotifications() {
+  const token = localStorage.getItem(`${preferenceKey()}_token`)
+  if (token) await unregisterDeviceToken(token)
+  const messaging = await getMessagingInstance()
+  if (messaging) await deleteToken(messaging)
+  localStorage.setItem(preferenceKey(), 'disabled')
+  localStorage.removeItem(`${preferenceKey()}_token`)
+}
 
 /**
  * Enable browser push notifications for usage alerts.
@@ -22,6 +34,7 @@ function attachForegroundListener(messaging) {
   foregroundListenerAttached = true
   console.log('[FCM] onMessage attached | permission=' + Notification.permission)
   onMessage(messaging, (payload) => {
+    if (!pushEnabled()) return
     console.log('[FCM] onMessage FIRED', payload && payload.notification)
     const title = (payload.notification && payload.notification.title) || 'WattWatcher'
     const body = (payload.notification && payload.notification.body) || 'You have a new energy alert.'
@@ -32,7 +45,7 @@ function attachForegroundListener(messaging) {
       detail: { title, body },
     }))
     try {
-      new Notification(title, { body })
+      navigator.serviceWorker.ready.then((registration) => registration.showNotification(title, { body })).catch(() => {})
     } catch (err) {
       console.error('Foreground notification display failed:', err)
     }
@@ -47,6 +60,7 @@ function attachForegroundListener(messaging) {
  * duplicate listeners are created. Never throws.
  */
 export async function ensureForegroundListener() {
+  if (!pushEnabled()) return false
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false
   }
@@ -76,6 +90,7 @@ export async function ensureForegroundListener() {
     // every authenticated reload, not only when the settings toggle is used.
     if (token) {
       await registerDeviceToken(token)
+      localStorage.setItem(`${preferenceKey()}_token`, token)
     }
     attachForegroundListener(messaging)
     return true
@@ -86,6 +101,11 @@ export async function ensureForegroundListener() {
 }
 
 export async function enablePushNotifications() {
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  if (ios && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone) {
+    return { ok: false, message: 'On iPhone (iOS 16.4+), use Share → Add to Home Screen, open the app icon, then enable notifications.' }
+  }
+  if (!window.isSecureContext) return { ok: false, message: 'Open the HTTPS app address to enable notifications.' }
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return { ok: false, message: 'Notifications are not supported in this browser.' }
   }
@@ -144,6 +164,8 @@ export async function enablePushNotifications() {
     }
 
     await registerDeviceToken(token)
+    localStorage.setItem(preferenceKey(), 'enabled')
+    localStorage.setItem(`${preferenceKey()}_token`, token)
     return { ok: true, token }
   } catch (err) {
     console.error('Push registration failed:', err)

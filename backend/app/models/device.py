@@ -15,6 +15,8 @@ class Device(Base):
     firmware_version = Column(String(20), nullable=True)
     location = Column(String(100), nullable=True)
     wifi_ssid = Column(String(100), nullable=True)
+    # SHA-256 hash of the one-time-disclosed meter upload token.
+    upload_token_hash = Column(String(64), nullable=True)
     status = Column(String(20), default="offline")
     last_seen = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

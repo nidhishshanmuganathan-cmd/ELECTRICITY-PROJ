@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.database import engine, Base
+from app.config import settings
 from app.routes import users, devices, readings
-from app.routes import fcm_test  # TEMPORARY DEV-ONLY - remove after verification
 from app.routes import simulation
 
 # Create tables on startup
@@ -32,6 +32,14 @@ with engine.connect() as conn:
     ))
     conn.commit()
 
+# Device upload tokens are stored as hashes so a database leak cannot be used
+# to impersonate a meter.
+with engine.connect() as conn:
+    conn.execute(text(
+        "ALTER TABLE devices ADD COLUMN IF NOT EXISTS upload_token_hash VARCHAR(64)"
+    ))
+    conn.commit()
+
 app = FastAPI(
     title="ElectricAI API",
     description="Smart Electricity Monitoring & AI Prediction Backend",
@@ -40,7 +48,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +57,6 @@ app.add_middleware(
 app.include_router(users.router)
 app.include_router(devices.router)
 app.include_router(readings.router)
-app.include_router(fcm_test.router)  # TEMPORARY DEV-ONLY - remove after verification
 app.include_router(simulation.router)
 
 

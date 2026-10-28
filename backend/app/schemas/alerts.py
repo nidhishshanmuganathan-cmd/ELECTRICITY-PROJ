@@ -1,6 +1,6 @@
 import uuid
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 AlertStatus = Literal["ok", "warning", "exceeded"]
@@ -14,8 +14,7 @@ class DeviceAlertOut(BaseModel):
     current_usage: float
     predicted_next_7d_total: float
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertsOut(BaseModel):
@@ -31,5 +30,4 @@ class AlertsOut(BaseModel):
     predicted_status: AlertStatus
     devices: list[DeviceAlertOut]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

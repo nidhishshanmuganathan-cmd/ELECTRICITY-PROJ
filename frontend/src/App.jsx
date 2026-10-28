@@ -8,10 +8,11 @@ import SignIn from './components/SignIn'
 import CreateAccount from './components/CreateAccount'
 import HomeDashboard from './components/HomeDashboard'
 import Analysis from './components/Analysis'
-import BillEstimation from './components/BillEstimation'
-import UpiPayment from './components/UpiPayment'
+import Insights from './components/Insights'
 import History from './components/History'
 import Profile from './components/Profile'
+import Devices from './components/Devices'
+import PushSetup from './components/PushSetup'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -24,7 +25,7 @@ function ProtectedRoute({ children }) {
     return <Navigate to="/signin" replace />
   }
 
-  return children
+  return <><PushSetup />{children}</>
 }
 
 function PublicRoute({ children }) {
@@ -54,6 +55,11 @@ function PushRegistration() {
 }
 
 export default function App() {
+  useEffect(() => {
+    if ('serviceWorker' in navigator && window.isSecureContext) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js').catch(() => {})
+    }
+  }, [])
   const [pushMessage, setPushMessage] = useState(null)
 
   useEffect(() => {
@@ -144,19 +150,10 @@ export default function App() {
           />
 
           <Route
-            path="/bill"
+            path="/insights"
             element={
               <ProtectedRoute>
-                <BillEstimation />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/payment"
-            element={
-              <ProtectedRoute>
-                <UpiPayment />
+                <Insights />
               </ProtectedRoute>
             }
           />
@@ -175,6 +172,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/devices"
+            element={
+              <ProtectedRoute>
+                <Devices />
               </ProtectedRoute>
             }
           />

@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -11,7 +13,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 class UsageSimIn(BaseModel):
-    device_id: str
+    device_id: uuid.UUID
     energy_value: float
 
 @router.post("/usage")
@@ -20,17 +22,9 @@ def simulate_usage(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 1. Verify the user owns the device
-    device = db.query(Device).filter(
-        Device.id == data.device_id,
-        Device.user_id == (
-            db.query(Device).filter(Device.device_code == "DEV-001").first().user_id # This is a simplified check for simulation
-            if not current_user else None # Better logic below
-        )
-    ).first()
-
-    # Correct Ownership check:
-    # Since we need to find the user's actual DB ID from the firebase_uid
+    # Verify that the signed-in user owns the target meter.  The previous
+    # implementation queried a hard-coded DEV-001 record before this check;
+    # that made simulation fail on databases without that sample device.
     from app.models.user import User
     user = db.query(User).filter(User.firebase_uid == current_user["uid"]).first()
     if not user:

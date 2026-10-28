@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import date
 from typing import Optional
 from decimal import Decimal
@@ -8,12 +8,10 @@ class DailyUsageOut(BaseModel):
     total_energy: Decimal
     peak_power: Optional[Decimal]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MonthlyUsageOut(BaseModel):
     month: str
     total_energy: Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

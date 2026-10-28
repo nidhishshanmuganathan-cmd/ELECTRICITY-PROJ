@@ -12,6 +12,9 @@ from app.schemas.usage import DailyUsageOut, MonthlyUsageOut
 from app.services.aggregation import AggregationService
 from app.services.prediction import PredictionService
 from app.services.notifications import NotificationService
+from app.services.device_auth import get_upload_device
+from app.services.anomaly import AnomalyService
+from app.schemas.anomaly import AnomalyOut
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -97,6 +100,16 @@ def get_predictions(
         "predicted": predicted
     }
 
+
+@router.get("/anomaly", response_model=AnomalyOut, tags=["readings"])
+def get_usage_anomaly(
+    device_id: uuid.UUID,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_owned_device(device_id, current_user, db)
+    return AnomalyService.analyze_device_usage(db, device_id)
+
 @router.get("/daily", response_model=list[DailyUsageOut], tags=["readings"])
 def get_daily_usage(
     device_id: uuid.UUID,
@@ -140,12 +153,9 @@ def aggregate_readings(
 def add_reading(
     device_id: uuid.UUID,
     reading_data: ReadingCreate,
+    device: Device = Depends(get_upload_device),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
     reading = MeterReading(device_id=device_id, **reading_data.model_dump())
     db.add(reading)
     device.status = "online"

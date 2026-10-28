@@ -1,5 +1,5 @@
 import { useAuth } from '../AuthContext'
-import { sendTestNotification, updateUserProfile } from '../api'
+import { sendPushTest, updateUserProfile } from '../api'
 import { useEffect, useState } from 'react'
 import { Zap, User, Settings, Bell, LogOut, ChevronRight, Gauge, UserCircle, X, Check, Minus, Plus, Sun, Moon, Globe, Battery } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -7,7 +7,7 @@ import { BottomNav } from './HomeDashboard'
 import { useTranslation, setLanguage, useUnit, setEnergyUnit } from '../utils/translate'
 import { signOut } from 'firebase/auth'
 import { auth } from '../firebase'
-import { enablePushNotifications } from '../notifications'
+import { enablePushNotifications, disablePushNotifications, pushEnabled } from '../notifications'
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -20,18 +20,38 @@ export default function Profile() {
   const monthlyLimit = user?.appUser?.monthly_limit ?? 500
   const [tempLimit, setTempLimit] = useState(monthlyLimit)
   const [notifications, setNotifications] = useState(
-    typeof Notification !== 'undefined' && Notification.permission === 'granted',
+    pushEnabled(),
   )
   const [notifError, setNotifError] = useState(null)
   const [notifBusy, setNotifBusy] = useState(false)
+
+  const handlePushTest = async () => {
+    setNotifBusy(true)
+    setNotifError(null)
+    try {
+      await sendPushTest()
+      setNotifError('Test notification sent. Check your notification tray.')
+    } catch (error) {
+      setNotifError(error.message || 'Test notification failed.')
+    } finally {
+      setNotifBusy(false)
+    }
+  }
 
   const handleToggleNotifications = async () => {
     if (notifBusy) {
       return
     }
     if (notifications) {
-      setNotifications(false)
-      setNotifError(null)
+      setNotifBusy(true)
+      try { await disablePushNotifications(); setNotifications(false); setNotifError(null) }
+      catch { setNotifError('Unable to disable notifications. Please retry.') }
+      finally { setNotifBusy(false) }
+      return
+    }
+    if (!user?.appUser?.phone) {
+      setShowPersonalModal(true)
+      setNotifError('Save your phone number first, then enable notifications.')
       return
     }
     setNotifBusy(true)
@@ -46,21 +66,6 @@ export default function Profile() {
     }
   }
 
-  const handleTestNotification = async () => {
-    setNotifBusy(true)
-    setNotifError(null)
-    try {
-      const result = await sendTestNotification()
-      if (!result.sent) {
-        setNotifError('No push token is registered. Enable notifications first.')
-      }
-    } catch (error) {
-      console.error('Test notification failed:', error)
-      setNotifError(error.message || 'Test notification failed.')
-    } finally {
-      setNotifBusy(false)
-    }
-  }
   const [darkMode, setDarkMode] = useState(localStorage.getItem('wattwatcher_theme') !== 'light')
 
   const toggleDarkMode = () => {
@@ -80,6 +85,7 @@ export default function Profile() {
     email: user?.appUser?.email || user?.firebaseUser?.email || '',
     phone: user?.appUser?.phone || '',
     address: user?.appUser?.address || '',
+
   }
 
   const [tempInfo, setTempInfo] = useState({ ...personalInfo })
@@ -91,6 +97,7 @@ export default function Profile() {
       email: personalInfo.email,
       phone: personalInfo.phone,
       address: personalInfo.address,
+
     })
   }, [user?.appUser])
 
@@ -122,12 +129,14 @@ export default function Profile() {
       full_name: tempInfo.fullName,
       phone: tempInfo.phone || null,
       address: tempInfo.address || null,
+
     })
 
     updateAppUser({
       full_name: updatedUser.full_name,
       phone: updatedUser.phone,
       address: updatedUser.address,
+
     })
 
     setShowPersonalModal(false)
@@ -147,6 +156,7 @@ export default function Profile() {
   }
   const handleSignOut = async () => {
   try {
+    if (pushEnabled()) await disablePushNotifications()
     await signOut(auth)
   } catch (error) {
     console.error('Sign out failed:', error)
@@ -203,13 +213,13 @@ export default function Profile() {
           })}
         </div>
 
-        {import.meta.env.DEV && notifications && (
+        {notifications && (
           <button
-            onClick={handleTestNotification}
+            onClick={handlePushTest}
             disabled={notifBusy}
             className="w-full rounded-2xl border border-electric/30 bg-electric/10 p-3 text-sm font-medium text-electric disabled:opacity-50"
           >
-            {notifBusy ? 'Sending test notification…' : 'Send test notification'}
+            {notifBusy ? 'Sending test…' : 'Send test notification'}
           </button>
         )}
 
@@ -342,7 +352,8 @@ export default function Profile() {
                 <input
                   type="email"
                   value={tempInfo.email}
-                  onChange={(e) => setTempInfo({ ...tempInfo, email: e.target.value })}
+                  readOnly
+                  aria-readonly="true"
                   className="w-full bg-dark-700 border border-dark-500 rounded-xl py-2.5 px-4 text-white text-sm placeholder-gray-500 focus:border-electric focus:ring-1 focus:ring-electric transition-all duration-300"
                 />
               </div>
@@ -368,6 +379,8 @@ export default function Profile() {
                   className="w-full bg-dark-700 border border-dark-500 rounded-xl py-2.5 px-4 text-white text-sm placeholder-gray-500 focus:border-electric focus:ring-1 focus:ring-electric transition-all duration-300"
                 />
               </div>
+
+
             </div>
 
             <button

@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from app.database import Base, engine
+from app.config import settings
 from app.routes import users, devices, readings
-from app.routes import fcm_test  # TEMPORARY DEV-ONLY - remove after verification
 from app.routes import simulation
 
 # This is also the module used by the test suite. Keep its bootstrap aligned
@@ -20,6 +20,9 @@ with engine.connect() as conn:
     conn.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_notification_status VARCHAR(20)"
     ))
+    conn.execute(text(
+        "ALTER TABLE devices ADD COLUMN IF NOT EXISTS upload_token_hash VARCHAR(64)"
+    ))
     conn.commit()
 
 app = FastAPI(
@@ -30,7 +33,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,7 +42,6 @@ app.add_middleware(
 app.include_router(users.router)
 app.include_router(devices.router)
 app.include_router(readings.router)
-app.include_router(fcm_test.router)  # TEMPORARY DEV-ONLY - remove after verification
 app.include_router(simulation.router)
 
 

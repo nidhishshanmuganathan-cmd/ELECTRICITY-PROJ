@@ -1,6 +1,8 @@
 import { auth } from './firebase'
 
-const API_BASE_URL = 'http://127.0.0.1:8000'
+// Keep local development zero-config while allowing a deployed frontend to
+// point at its own API without a source-code change.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
 async function apiRequest(path, options = {}) {
   const user = auth.currentUser
@@ -47,6 +49,10 @@ export function getDevices() {
   return apiRequest('/devices/')
 }
 
+export function provisionDeviceToken(deviceId) {
+  return apiRequest(`/devices/${deviceId}/provision-token`, { method: 'POST' })
+}
+
 export function createDemoData() {
   return apiRequest('/devices/demo-data', { method: 'POST' })
 }
@@ -65,6 +71,10 @@ export function getMonthlyUsage(deviceId) {
 
 export async function getPredictions(deviceId, range = '7D') {
   return apiRequest(`/devices/${deviceId}/readings/predictions?range=${range}`)
+}
+
+export function getUsageAnomaly(deviceId) {
+  return apiRequest(`/devices/${deviceId}/readings/anomaly`)
 }
 
 export async function getUsageSummary(deviceId, range) {
@@ -89,14 +99,12 @@ export function registerDeviceToken(fcmToken) {
   })
 }
 
-// Development-only delivery check.  This verifies the stored browser token
-// and Firebase delivery path without changing a user's usage data.
-export function sendTestNotification() {
-  return apiRequest('/test/notify-me', {
-    method: 'POST',
-    body: JSON.stringify({
-      title: 'WattWatcher test',
-      body: 'Push notifications are configured correctly.',
-    }),
+export function unregisterDeviceToken(token) {
+  return apiRequest('/users/me/device-token', {
+    method: 'DELETE', body: JSON.stringify({ fcm_token: token }),
   })
+}
+
+export function sendPushTest() {
+  return apiRequest('/users/me/push-test', { method: 'POST' })
 }

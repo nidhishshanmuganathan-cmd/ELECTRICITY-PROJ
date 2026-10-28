@@ -9,8 +9,7 @@ class NotificationService:
     @staticmethod
     def check_and_notify_usage(db: Session, user_id) -> dict:
         """
-        Evaluates the user's current energy usage and sends a
-        push notification if they are in 'warning' or 'exceeded' state.
+        Evaluates usage and sends opted-in app push alerts.
         """
         # 1. Evaluate the current alert state
         alert_result = AlertService.evaluate_user_alerts(db, user_id)
@@ -57,7 +56,7 @@ class NotificationService:
             title = "⚠️ Energy Warning"
             body = f"You have used {usage_pct}% of your monthly energy limit. Keep an eye on your consumption!"
 
-        # 3. Send the notification if a state was matched
+        # Delivery is triggered by meter uploads, even when the app is closed.
         if title and body:
             message_id = FCMService.notify_user(
                 db=db,
@@ -72,14 +71,14 @@ class NotificationService:
                 db.commit()
                 return {
                     "success": True,
-                    "message": f"Notification sent: {status}",
+                    "message": f"Alert sent: {status}",
                     "message_id": message_id,
                     "status": status
                 }
             else:
                 return {
                     "success": False,
-                    "message": "User has no registered FCM token.",
+                    "message": "No push token is registered.",
                     "status": status
                 }
 

@@ -4,6 +4,8 @@ __pycache__/
 
 # Virtual environments
 .venv/
+venv/
+.pytest_cache/
 
 # Secrets and local settings
 .env
@@ -18,3 +20,4 @@ build/
 
 *.python-version
 config.local.toml
+firebase-service-account.json
