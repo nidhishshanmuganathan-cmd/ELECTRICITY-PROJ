@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.database import get_db
 from app.auth import get_current_user
 from app.models.user import User
@@ -64,6 +66,20 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=30)
     address: str | None = Field(default=None, max_length=255)
     monthly_limit: float | None = Field(default=None, gt=0, le=100_000)
+
+    @field_validator("phone")
+    @classmethod
+    def normalize_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not re.fullmatch(r"[+0-9 ()-]+", value):
+            raise ValueError("Enter a valid Indian mobile number, with or without +91.")
+        compact = re.sub(r"[ ()-]", "", value)
+        match = re.fullmatch(r"(?:\+?91)?([6-9][0-9]{9})", compact)
+        if not match:
+            raise ValueError("Enter a valid Indian mobile number, with or without +91.")
+        return "+91" + match.group(1)
 
 
 @router.get("/me/alerts", response_model=AlertsOut)
@@ -181,15 +197,27 @@ def update_me(
     else:
         if user_data.full_name is not None:
             user.full_name = user_data.full_name
-        if user_data.phone is not None:
+        # An explicit null clears the phone; omission preserves existing data.
+        if "phone" in user_data.model_fields_set:
             user.phone = user_data.phone
         if user_data.address is not None:
             user.address = user_data.address
         if user_data.monthly_limit is not None:
             user.monthly_limit = user_data.monthly_limit
 
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError as error:
+        db.rollback()
+        # Never include database exception text: it can contain phone numbers.
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", "") or ""
+        detail = ("This phone number cannot be used for this account."
+                  if "phone" in constraint else "Profile details conflict with an existing account.")
+        raise HTTPException(status_code=409, detail=detail) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Could not save your profile. Please try again.") from None
 
     return {
         "id": user.id,

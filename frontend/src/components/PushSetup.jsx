@@ -4,6 +4,11 @@ import { useAuth } from "../AuthContext";
 import { updateUserProfile } from "../api";
 import { enablePushNotifications, pushEnabled } from "../notifications";
 import { useTranslation } from "../utils/translate";
+import {
+  normalizeIndianPhone,
+  confirmSavedPhone,
+  profileSaveError,
+} from "../utils/phone";
 
 export default function PushSetup() {
   const { user, updateAppUser } = useAuth(),
@@ -15,13 +20,17 @@ export default function PushSetup() {
   if (!user || done || pushEnabled()) return null;
   async function save(e) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
+    setMessage("");
     try {
-      const updated = await updateUserProfile({ phone });
+      const normalized = normalizeIndianPhone(phone, { required: true });
+      const updated = await updateUserProfile({ phone: normalized });
+      confirmSavedPhone(updated, normalized);
       updateAppUser(updated);
       setMessage(t("phoneSaved"));
-    } catch {
-      setMessage(t("saveFailed"));
+    } catch (error) {
+      setMessage(profileSaveError(error, t));
     } finally {
       setBusy(false);
     }
@@ -49,9 +58,12 @@ export default function PushSetup() {
               required
               type="tel"
               autoComplete="tel"
-              pattern="\+?[0-9 ()-]{10,20}"
+              maxLength={30}
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setMessage("");
+              }}
             />
           </label>
           <button disabled={busy} className="button secondary">

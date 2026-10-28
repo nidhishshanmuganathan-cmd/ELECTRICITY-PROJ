@@ -31,6 +31,11 @@ import {
   setEnergyUnit,
 } from "../utils/translate";
 import { energyText } from "../utils/energy";
+import {
+  normalizeIndianPhone,
+  confirmSavedPhone,
+  profileSaveError,
+} from "../utils/phone";
 import { Badge, Card, CardTitle, Modal, PageHeader, Segmented } from "./ui";
 
 export default function Profile() {
@@ -65,6 +70,7 @@ export default function Profile() {
   }, [monthlyLimit]);
   function open(name) {
     setFormError(null);
+    setMessage(null);
     setTempInfo(personalInfo);
     setTempLimit(monthlyLimit);
     setTempPrefs({ language: currentLanguage, unit });
@@ -128,11 +134,13 @@ export default function Profile() {
     setFormError(null);
     try {
       if (modal === "personal") {
+        const phone = normalizeIndianPhone(tempInfo.phone);
         const updated = await updateUserProfile({
           full_name: tempInfo.fullName,
-          phone: tempInfo.phone || null,
+          phone,
           address: tempInfo.address || null,
         });
+        confirmSavedPhone(updated, phone);
         updateAppUser({
           full_name: updated.full_name,
           phone: updated.phone,
@@ -151,8 +159,8 @@ export default function Profile() {
         setMessage(t("settingsSaved"));
       }
       setModal(null);
-    } catch {
-      setFormError(t("saveFailed"));
+    } catch (error) {
+      setFormError(profileSaveError(error, t));
     } finally {
       setBusy(false);
     }
@@ -342,7 +350,7 @@ export default function Profile() {
                       readOnly={key === "email"}
                       required={key === "fullName"}
                       maxLength={
-                        key === "fullName" ? 100 : key === "phone" ? 20 : 255
+                        key === "fullName" ? 100 : key === "phone" ? 30 : 255
                       }
                       onChange={(e) =>
                         setTempInfo({ ...tempInfo, [key]: e.target.value })

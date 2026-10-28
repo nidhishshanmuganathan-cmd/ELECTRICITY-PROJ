@@ -47,7 +47,7 @@ const notifications = `export const pushEnabled=()=>window.__pushEnabled||false;
     window.__qaProfile = {
       full_name: "Nidhi",
       email: "ui-test@example.com",
-      phone: "+910000000000",
+      phone: "+916000000000",
       monthly_limit: 500,
       timezone: "Asia/Kolkata",
     };

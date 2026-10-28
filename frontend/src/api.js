@@ -30,7 +30,11 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.detail || 'Something went wrong')
+    const detail = errorData.detail
+    const error = new Error(typeof detail === 'string' ? detail : 'Could not save or load this data. Please check your input and try again.')
+    error.status = response.status
+    error.fields = Array.isArray(detail) ? detail.map(item => item.loc?.at(-1)) : []
+    throw error
   }
 
   return response.json()

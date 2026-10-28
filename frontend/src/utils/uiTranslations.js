@@ -594,6 +594,11 @@ const help = {
   account: "Your account",
   profileSaved: "Your profile has been saved.",
   saveFailed: "Could not save changes. Please try again.",
+  invalidPhone: "Enter a valid 10-digit Indian mobile number, with or without +91.",
+  phoneConflict: "This phone number cannot be used for this account. Check the number and try again.",
+  saveSignInAgain: "Your session could not be verified. Sign in again before saving.",
+  saveNetworkError: "Could not reach the server. Check your connection and try again.",
+  saveUnconfirmed: "The server did not confirm saving your number. Please try again.",
   signOutFailed: "Could not sign out. Check your connection and try again.",
   notificationSetup: "Receive energy alerts on your phone",
   installHint:
