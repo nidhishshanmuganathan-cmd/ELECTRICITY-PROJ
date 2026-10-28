@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { auth } from '../firebase'
+import { authErrorMessage } from '../authErrors'
 import { Link } from 'react-router-dom'
 import { Zap, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { 
@@ -20,6 +21,7 @@ export default function SignIn() {
 
     const handleSubmit = async (e) => {
     e.preventDefault()
+    if (loading) return
     const newErrors = {}
     if (!email.trim()) newErrors.email = 'This field is required'
     if (!password.trim()) newErrors.password = 'This field is required'
@@ -29,11 +31,12 @@ export default function SignIn() {
     }
 
     setLoading(true)
+    setErrors({})
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      await signInWithEmailAndPassword(auth, email.trim(), password)
       navigate('/')
     } catch (error) {
-      setErrors({ password: 'Invalid email or password' })
+      setErrors({ password: authErrorMessage(error) })
     } finally {
       setLoading(false)
     }
@@ -47,6 +50,9 @@ export default function SignIn() {
     })
   }
   const handleGoogleSignIn = async () => {
+  if (loading) return;
+  setLoading(true);
+  setErrors({});
   try {
     const provider = new GoogleAuthProvider();
 
@@ -54,8 +60,9 @@ export default function SignIn() {
 
     navigate("/");
   } catch (error) {
-    console.error("Google sign-in failed:", error.code, error.message);
-    alert(error.code + "\n" + error.message);
+    setErrors({ email: authErrorMessage(error) });
+  } finally {
+    setLoading(false);
   }
 };
 
@@ -66,11 +73,10 @@ const handleForgotPassword = async () => {
   }
 
   try {
-    await sendPasswordResetEmail(auth, email)
+    await sendPasswordResetEmail(auth, email.trim())
     alert('Password reset email sent! Check your inbox.')
   } catch (error) {
-    console.error('Password reset failed:', error.code, error.message)
-    alert('Unable to send reset email. Please check your email address.')
+    setErrors({ email: authErrorMessage(error) })
   }
 };
 
@@ -141,6 +147,7 @@ const handleForgotPassword = async () => {
           {/* Submit */}
           <button
             type="submit"
+            disabled={loading}
             className="w-full mt-2 bg-electric hover:bg-electric-dark text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-glow active:scale-[0.98]"
           >
             Sign In
@@ -160,6 +167,7 @@ const handleForgotPassword = async () => {
           <button 
             className="flex-1 glass-light rounded-xl py-3 flex items-center justify-center gap-2 hover:border-electric/30 transition-all duration-300"
             onClick={handleGoogleSignIn}
+            disabled={loading}
           >
             <svg width="18" height="18" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

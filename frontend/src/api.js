@@ -2,7 +2,8 @@ import { auth } from './firebase'
 
 // Keep local development zero-config while allowing a deployed frontend to
 // point at its own API without a source-code change.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL?.trim() ||
+  (import.meta.env.PROD ? 'https://electricity-proj.onrender.com' : 'http://127.0.0.1:8000')).replace(/\/+$/, '')
 
 async function apiRequest(path, options = {}) {
   const user = auth.currentUser

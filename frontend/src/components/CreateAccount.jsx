@@ -3,6 +3,7 @@ import { Zap, Mail, Eye, EyeOff, User, Lock } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, updateProfile } from 'firebase/auth'
 import { auth } from '../firebase'
+import { authErrorMessage } from '../authErrors'
 import { syncUser } from '../api'
 
 export default function CreateAccount() {
@@ -28,6 +29,7 @@ export default function CreateAccount() {
 
     const handleSubmit = async (e) => {
     e.preventDefault()
+    if (loading) return
     const newErrors = {}
 
     if (!fullName.trim()) newErrors.fullName = 'This field is required'
@@ -45,8 +47,9 @@ export default function CreateAccount() {
     }
 
     setLoading(true)
+    setErrors({})
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password)
       await updateProfile(userCredential.user, { displayName: fullName })
       await syncUser()
       navigate('/')
@@ -56,7 +59,7 @@ export default function CreateAccount() {
       } else if (error.code === 'auth/weak-password') {
         setErrors({ password: 'Password should be at least 6 characters' })
       } else {
-        setErrors({ email: 'Something went wrong. Please try again.' })
+        setErrors({ email: authErrorMessage(error) })
       }
     } finally {
       setLoading(false)
@@ -64,14 +67,16 @@ export default function CreateAccount() {
   }
 
   const handleGoogleSignIn = async () => {
+    if (loading) return
     setLoading(true)
+    setErrors({})
     try {
       const provider = new GoogleAuthProvider()
       const userCredential = await signInWithPopup(auth, provider)
       await syncUser()
       navigate('/')
     } catch (error) {
-      setErrors({ email: 'Google sign-in could not be completed. Please try again.' })
+      setErrors({ email: authErrorMessage(error) })
     } finally {
       setLoading(false)
     }
@@ -177,6 +182,7 @@ export default function CreateAccount() {
           {/* Submit Button */}
           <button
             type="submit"
+            disabled={loading}
             className="w-full mt-6 bg-electric hover:bg-electric-dark text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-glow active:scale-[0.98]"
           >
             Create Account
