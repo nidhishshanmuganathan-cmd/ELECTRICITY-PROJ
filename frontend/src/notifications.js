@@ -35,7 +35,6 @@ function attachForegroundListener(messaging) {
   console.log('[FCM] onMessage attached | permission=' + Notification.permission)
   onMessage(messaging, (payload) => {
     if (!pushEnabled()) return
-    console.log('[FCM] onMessage FIRED', payload && payload.notification)
     const title = (payload.notification && payload.notification.title) || 'WattWatcher'
     const body = (payload.notification && payload.notification.body) || 'You have a new energy alert.'
 
@@ -60,6 +59,7 @@ function attachForegroundListener(messaging) {
  * duplicate listeners are created. Never throws.
  */
 export async function ensureForegroundListener() {
+  if (!VAPID_KEY) return false
   if (!pushEnabled()) return false
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return false
@@ -156,9 +156,6 @@ export async function enablePushNotifications() {
         ? { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration }
         : { vapidKey: VAPID_KEY },
     )
-    console.log('[FCM] getToken returned | token=' + String(token || '').slice(0, 16) + ' | hasSW=' + !!registration)
-
-    console.log('[FCM] token obtained | prefix=' + String(token || '').slice(0, 16))
     if (!token) {
       return { ok: false, message: 'Could not obtain a push token. Please try again.' }
     }
@@ -168,7 +165,7 @@ export async function enablePushNotifications() {
     localStorage.setItem(`${preferenceKey()}_token`, token)
     return { ok: true, token }
   } catch (err) {
-    console.error('Push registration failed:', err)
+    console.error('Push registration failed')
     return { ok: false, message: 'Push registration failed. Please try again.' }
   }
 }
